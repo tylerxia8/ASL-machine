@@ -65,17 +65,39 @@ Two paths depending on whether you train locally or on GitHub Actions.
 
 ### Path A — GitHub Actions (recommended; no local disk needed)
 
-Training runs on a free GitHub-hosted runner (4 cores, 7 GB RAM, 14 GB disk). The trained `model.onnx` is published as a release asset; you download it back into `apps/web/public/models/` locally.
+Training runs on a free GitHub-hosted runner (4 cores, 7 GB RAM, 14 GB disk). Raw videos stay on the runner — your laptop only ever sees the final `model.onnx` (~14 MB) published as a Release asset.
 
-1. **Accept Sem-Lex terms** at https://docs.google.com/forms/d/e/1FAIpQLSeFjIcbJcr2kWibgrEdFyLhNADo1ErnVGuQHtGeiDiqe4iteQ/viewform. After acceptance you'll get an index file URL.
-2. **Add the URL as a repo secret:** GitHub → repo → Settings → Secrets and variables → Actions → New repository secret. Name: `SEMLEX_INDEX_URL`.
-3. **Dispatch the training workflow:** GitHub → repo → Actions → "Train Wave 1" → Run workflow. Choose `dataset_source = semlex` (or `both` to include your learner samples).
-4. **Download the release:** After the workflow finishes (~10–30 min depending on dataset size), a new GitHub Release appears with `model.onnx`, `labels.json`, `model_meta.json`. Drop them into `apps/web/public/models/` locally and `npm run dev`.
-5. **Dry run** — [docs/WAVE1_DRY_RUN.md](docs/WAVE1_DRY_RUN.md) with 2–3 testers.
+1. **Accept Sem-Lex terms** at https://docs.google.com/forms/d/e/1FAIpQLSeFjIcbJcr2kWibgrEdFyLhNADo1ErnVGuQHtGeiDiqe4iteQ/viewform. You'll receive Google Drive links for 7 files. We only use 4 (the metadata CSV and the 3 raw video tarballs); the 3 `*-poses.tar.gz` files are skipped because they contain pretrained-landmark output that would violate Req 7 — see [docs/NO_PRETRAINED_MODELS.md](docs/NO_PRETRAINED_MODELS.md).
+
+2. **Extract the 4 Drive file IDs** (the ID is the long string between `/d/` and `/view` in each link).
+
+3. **Add a single repo secret** at GitHub → repo → Settings → Secrets and variables → Actions → New repository secret. Name: `SEMLEX_DRIVE_FILES`. Value:
+   ```json
+   {
+     "metadata": "1pkX8_TzL3kdJytQvrU68QEAp6oUvt4rv",
+     "train":    "1jiUasWSGv5lkrBUIRmtCXyMzliClCqXo",
+     "val":      "1VvrbYgNZe_4fWS5ZdSsHyxOuWHmhisGq",
+     "test":     "1uYoM1zNpw4oLpJe4LwtDVPBNgKmAi8CC"
+   }
+   ```
+   (The IDs above are placeholders showing format — paste your actual IDs from the Drive URLs.)
+
+4. **Dispatch the workflow:** Actions → "Train Wave 1" → Run workflow. Recommended first run:
+   - `dataset_source` = `both`
+   - `semlex_splits` = `val` (smallest archive; fastest first end-to-end run)
+   - `semlex_clips_per_sign` = 50
+   - `epochs` = 20
+   - `model_version` = `wave1-semlex-val-v1`
+
+   Once that works, repeat with `semlex_splits = train,val,test` for the full dataset.
+
+5. **Download the release:** After the workflow finishes (~10–60 min depending on splits + clips/sign), a new GitHub Release appears tagged with your `model_version`. It contains `model.onnx`, `labels.json`, `model_meta.json`, `eval_metrics.json`, `VALIDATION_REPORT.md`. Drop the first three into `apps/web/public/models/` locally and `npm run dev`.
+
+6. **Dry run** — [docs/WAVE1_DRY_RUN.md](docs/WAVE1_DRY_RUN.md) with 2–3 testers.
 
 The workflow file: [.github/workflows/train_wave1.yml](.github/workflows/train_wave1.yml).
-The SemLex fetcher: [ml/scripts/fetch_semlex.py](ml/scripts/fetch_semlex.py).
-Attestation that no SemLex pretrained models are used: [docs/NO_PRETRAINED_MODELS.md](docs/NO_PRETRAINED_MODELS.md).
+The Sem-Lex fetcher (streams tarballs, extracts only matched clips, never touches `*-poses.tar.gz`): [ml/scripts/fetch_semlex.py](ml/scripts/fetch_semlex.py).
+Attestation that no Sem-Lex pretrained models or pose features are used: [docs/NO_PRETRAINED_MODELS.md](docs/NO_PRETRAINED_MODELS.md).
 
 ### Path B — Local recording + local training
 

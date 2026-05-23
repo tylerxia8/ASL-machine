@@ -11,13 +11,18 @@ name: Train Wave 1
 #
 # Inputs:
 #   - dataset_source: "learner_samples" (committed 25 webms, tiny smoke), or
-#                     "semlex" (downloads SemLex via fetch_semlex.py), or
+#                     "semlex" (downloads Sem-Lex via fetch_semlex.py), or
 #                     "both" (combines them).
+#   - semlex_splits: comma-separated subset of {train,val,test}. Default "val"
+#                    is smallest and fastest for a first end-to-end run. Use
+#                    "train,val,test" for the full dataset (much larger).
 #
-# Required secret for SemLex paths:
-#   - SEMLEX_INDEX_URL: URL to the SemLex index file emailed to you after
-#     accepting their terms of use:
-#     https://docs.google.com/forms/d/e/1FAIpQLSeFjIcbJcr2kWibgrEdFyLhNADo1ErnVGuQHtGeiDiqe4iteQ/viewform
+# Required secret for Sem-Lex paths:
+#   - SEMLEX_DRIVE_FILES: JSON dict of Google Drive file IDs from Sem-Lex.
+#     {"metadata":"<id>","train":"<id>","val":"<id>","test":"<id>"}
+#     `metadata` is required; train/val/test are optional and download is
+#     gated by the `semlex_splits` workflow input.
+#     Add at: repo Settings → Secrets and variables → Actions → New secret.
 
 on:
   workflow_dispatch:
@@ -30,8 +35,12 @@ on:
           - semlex
           - both
         default: learner_samples
+      semlex_splits:
+        description: "Which Sem-Lex splits to pull (csv of train/val/test). 'val' is smallest."
+        type: string
+        default: val
       semlex_clips_per_sign:
-        description: "Cap per sign when pulling from SemLex (ignored otherwise)"
+        description: "Cap per sign when pulling from Sem-Lex (ignored otherwise)"
         type: number
         default: 50
       epochs:
@@ -60,7 +69,7 @@ jobs:
       - name: Install ML deps (CPU torch, smaller than default CUDA build)
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r ml/requirements.txt onnxscript
+          pip install -r ml/requirements.txt
 
       - name: Stage learner_samples (if requested)
         if: inputs.dataset_source == 'learner_samples' || inputs.dataset_source == 'both'
@@ -69,24 +78,58 @@ jobs:
           cp ml/data/learner_samples/signer_a/*.webm ml/data/incoming/
           echo "Staged $(ls ml/data/incoming/*.webm | wc -l) learner webms"
 
-      - name: Cache SemLex downloads
+      - name: Cache Sem-Lex extracted videos
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
         uses: actions/cache@v4
         with:
-          path: ml/data/semlex
-          key: semlex-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_clips_per_sign }}
+          # Cache the already-extracted per-sign videos (small: ~1–2 GB),
+          # not the multi-GB raw tarballs (which we stream-extract and delete).
+          path: ml/data/incoming
+          key: semlex-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_splits }}-${{ inputs.semlex_clips_per_sign }}
 
-      - name: Fetch SemLex subset
+      - name: Subset Sem-Lex SEMLEX_DRIVE_FILES to the requested splits
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
+        id: subset_drive
         env:
-          SEMLEX_INDEX_URL: ${{ secrets.SEMLEX_INDEX_URL }}
-          SEMLEX_CLIPS_PER_SIGN: ${{ inputs.semlex_clips_per_sign }}
+          SEMLEX_DRIVE_FILES: ${{ secrets.SEMLEX_DRIVE_FILES }}
+          SPLITS: ${{ inputs.semlex_splits }}
         run: |
-          if [ -z "$SEMLEX_INDEX_URL" ]; then
-            echo "ERROR: SEMLEX_INDEX_URL secret not set. Add it under repo Settings → Secrets and variables → Actions." >&2
+          if [ -z "$SEMLEX_DRIVE_FILES" ]; then
+            echo "ERROR: SEMLEX_DRIVE_FILES secret not set." >&2
+            echo "Add it under repo Settings → Secrets and variables → Actions." >&2
+            echo 'Format: {"metadata":"<id>","train":"<id>","val":"<id>","test":"<id>"}' >&2
             exit 1
           fi
-          python ml/scripts/fetch_semlex.py
+          # Filter the secret JSON down to {metadata, <requested splits>} so the
+          # fetcher doesn't try to download splits we didn't ask for.
+          python <<'PY' > drive_subset.json
+          import json, os
+          full = json.loads(os.environ["SEMLEX_DRIVE_FILES"])
+          if "metadata" not in full:
+              raise SystemExit("SEMLEX_DRIVE_FILES missing required 'metadata' key")
+          out = {"metadata": full["metadata"]}
+          for split in [s.strip() for s in os.environ["SPLITS"].split(",") if s.strip()]:
+              if split not in {"train", "val", "test"}:
+                  raise SystemExit(f"Unknown split {split!r}; must be one of train/val/test")
+              if split not in full:
+                  raise SystemExit(f"Requested split {split!r} but no Drive ID in SEMLEX_DRIVE_FILES")
+              out[split] = full[split]
+          print(json.dumps(out))
+          PY
+          echo "subset=$(cat drive_subset.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch Sem-Lex (stream-extract only matched videos; skips poses/*.tar.gz)
+        if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
+        env:
+          SEMLEX_DRIVE_FILES: ${{ steps.subset_drive.outputs.subset }}
+          SEMLEX_CLIPS_PER_SIGN: ${{ inputs.semlex_clips_per_sign }}
+        run: python ml/scripts/fetch_semlex.py
+
+      - name: Show staged video summary
+        run: |
+          echo "ml/data/incoming/ contents:"
+          ls ml/data/incoming/ | head -30 || true
+          echo "Total staged: $(ls ml/data/incoming/ | wc -l)"
 
       - name: Decode videos → .npz
         run: python ml/scripts/import_captures.py
@@ -154,6 +197,7 @@ jobs:
           name: "Model ${{ inputs.model_version }}"
           body: |
             Trained from scratch on dataset source: `${{ inputs.dataset_source }}`.
+            Sem-Lex splits used: `${{ inputs.semlex_splits }}`.
             Epochs: ${{ inputs.epochs }}.
 
             ## Files

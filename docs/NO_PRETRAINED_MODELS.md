@@ -23,7 +23,20 @@ The sign recognition system must **not** use pretrained weights for:
 The Wave 1 model is trained on a combination of:
 
 1. **Self-recorded learner clips** in [`ml/data/learner_samples/`](../ml/data/learner_samples/), captured via the in-app `/capture` flow.
-2. **Sem-Lex Benchmark videos** ([leekezar/SemLex](https://github.com/leekezar/SemLex), Apache-2.0). We use **only the raw videos** from this dataset; the Sem-Lex repository also distributes pretrained SL-GCN models, **which we do not use**. Our pipeline never imports, downloads, or references those model files. See [`ml/scripts/fetch_semlex.py`](../ml/scripts/fetch_semlex.py) — it touches only the video index, never the model artifacts.
+2. **Sem-Lex Benchmark videos** ([leekezar/SemLex](https://github.com/leekezar/SemLex), Apache-2.0). We use **only the raw video tarballs and the metadata CSV** from this dataset:
+
+   **Used (4 files):**
+   - `semlex_metadata.csv` — index mapping each video filename to gloss / signer / split
+   - `train.tar.gz` — train-split raw videos
+   - `val.tar.gz` — val-split raw videos
+   - `test.tar.gz` — test-split raw videos
+
+   **Explicitly NOT used (3 files):**
+   - `sem-lex-train-poses.tar.gz`
+   - `sem-lex-val-poses.tar.gz`
+   - `sem-lex-test-poses.tar.gz`
+
+   These pose archives contain pre-computed body/hand landmark features extracted by a **pretrained landmark detector** — exactly what rubric Req 7 forbids. Our pipeline does not download, extract, or reference these files at any point. [`ml/scripts/fetch_semlex.py`](../ml/scripts/fetch_semlex.py) accepts only the 4 file IDs above; the SEMLEX_DRIVE_FILES JSON schema has no key for poses. The Sem-Lex repository also distributes pretrained SL-GCN models for gloss/phoneme recognition — we don't touch those either.
 
 External video data is permitted under rubric Req 6 (which speaks of "curating or collecting" the dataset). Req 7 is specifically about pretrained model **weights**, not source videos.
 
@@ -50,8 +63,8 @@ You can reproduce the attestation locally:
 grep -rE "pretrained|from_pretrained|mediapipe|torchvision\.models|timm\.|transformers|tensorflow_hub|ultralytics" \
   ml/*.py ml/scripts/*.py apps/api/*.py apps/web/src/
 
-# 2. SemLex pretrained models never referenced
-grep -rE "SL-GCN|SLGCN|sl_gcn|sl-gcn\.pt|gloss_recognition\.pt" \
+# 2. Sem-Lex pretrained models AND pretrained-derived pose features never referenced
+grep -rE "SL-GCN|SLGCN|sl_gcn|sl-gcn\.pt|gloss_recognition\.pt|sem-lex.*poses|semlex.*poses" \
   ml/ apps/ scripts/
 
 # 3. Model file confirms random init
