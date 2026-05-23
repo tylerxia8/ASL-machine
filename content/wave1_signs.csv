@@ -1,0 +1,26 @@
+sign_id,gloss,category,unit
+hello,Hello,greetings,introductions
+goodbye,Goodbye,greetings,introductions
+please,Please,greetings,introductions
+thank_you,Thank you,greetings,introductions
+sorry,Sorry,greetings,introductions
+yes,Yes,greetings,introductions
+no,No,greetings,introductions
+help,Help,greetings,introductions
+name,Name,greetings,introductions
+nice,Nice,greetings,introductions
+meet,Meet,greetings,introductions
+what,What,questions,questions
+how,How,questions,questions
+where,Where,questions,questions
+who,Who,questions,questions
+one,One,numbers,numbers
+two,Two,numbers,numbers
+three,Three,numbers,numbers
+four,Four,numbers,numbers
+five,Five,numbers,numbers
+eat,Eat,verbs,daily
+sleep,Sleep,verbs,daily
+water,Water,objects,daily
+friend,Friend,family,family
+deaf,Deaf,culture,culture

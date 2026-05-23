@@ -1,0 +1,10 @@
+{
+  "sign_id": "sign_language",
+  "gloss": "Sign language",
+  "handshape": "check handshape",
+  "movement": "correct movement path",
+  "location": "correct spatial zone",
+  "orientation": "Match palm orientation to reference.",
+  "framing": "Hold sign still inside guide box for one second.",
+  "common_confusions": "If confused with similar culture signs, slow down and emphasize handshape."
+}

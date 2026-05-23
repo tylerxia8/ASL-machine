@@ -1,0 +1,286 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/api";
+import { requestCamera, recordVideo, CameraError } from "../lib/camera";
+
+const TARGET_PER_SIGN = 30;
+const MIN_PER_SIGN = 10;
+const RECORD_MS = 2000;
+const COUNTDOWN_MS = 3000;
+const INCOMING_REL = "ml\\data\\incoming";
+
+type Phase = "idle" | "countdown" | "recording" | "saving";
+
+const CAMERA_HELP: Record<string, string> = {
+  denied: "Camera access was denied. Enable camera permission in browser settings and reload.",
+  unsupported: "This browser does not support camera access. Use Chrome or Edge on desktop.",
+  not_found: "No camera found. Connect a webcam and retry.",
+  unknown: "Camera error. Check drivers and close other apps using the camera.",
+};
+
+export default function CapturePage() {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [signerId, setSignerId] = useState("signer_a");
+  const [signs, setSigns] = useState<SignMeta[]>([]);
+  const [index, setIndex] = useState(0);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [status, setStatus] = useState("");
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [countdown, setCountdown] = useState(3);
+  const lastDownloadUrlRef = useRef<string | null>(null);
+  const [lastFilename, setLastFilename] = useState<string | null>(null);
+  const [reference, setReference] = useState<HintResponse | null>(null);
+
+  const current = signs[index];
+
+  useEffect(() => {
+    if (!current) return;
+    setReference(null);
+    fetchHint(current.sign_id, "fail", "capture-anon")
+      .then(setReference)
+      .catch(() => setReference(null));
+  }, [current?.sign_id]);
+
+  useEffect(() => {
+    fetchSigns(1)
+      .then((s) => setSigns(s))
+      .catch(() => setStatus("Failed to load trained sign list from API."));
+  }, []);
+
+  useEffect(() => {
+    const raw = localStorage.getItem(`capture_counts_${signerId}`);
+    setCounts(raw ? JSON.parse(raw) : {});
+  }, [signerId]);
+
+  useEffect(() => {
+    requestCamera()
+      .then((stream) => {
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play();
+        }
+      })
+      .catch((e) => {
+        const code = (e as { code: CameraError }).code || "unknown";
+        setCameraError(CAMERA_HELP[code] || CAMERA_HELP.unknown);
+      });
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  const progress = useMemo(() => {
+    const done = signs.filter((s) => (counts[s.sign_id] ?? 0) >= TARGET_PER_SIGN).length;
+    const minDone = signs.filter((s) => (counts[s.sign_id] ?? 0) >= MIN_PER_SIGN).length;
+    const totalClips = Object.values(counts).reduce((a, b) => a + b, 0);
+    return { done, minDone, total: signs.length, totalClips };
+  }, [counts, signs]);
+
+  const startRecord = async () => {
+    if (!current || !streamRef.current) return;
+    setStatus("");
+    setPhase("countdown");
+    for (let n = 3; n >= 1; n--) {
+      setCountdown(n);
+      await new Promise((r) => setTimeout(r, COUNTDOWN_MS / 3));
+    }
+    setPhase("recording");
+    let blob: Blob;
+    try {
+      blob = await recordVideo(streamRef.current, RECORD_MS);
+    } catch (e) {
+      setPhase("idle");
+      setStatus((e as Error).message);
+      return;
+    }
+    setPhase("saving");
+    const filename = `${current.sign_id}_${signerId}_${Date.now()}.webm`;
+    const url = URL.createObjectURL(blob);
+    if (lastDownloadUrlRef.current) URL.revokeObjectURL(lastDownloadUrlRef.current);
+    lastDownloadUrlRef.current = url;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setLastFilename(filename);
+
+    const nextCount = (counts[current.sign_id] ?? 0) + 1;
+    const updated = { ...counts, [current.sign_id]: nextCount };
+    setCounts(updated);
+    localStorage.setItem(`capture_counts_${signerId}`, JSON.stringify(updated));
+    setStatus(`Saved ${filename} (${(blob.size / 1024).toFixed(0)} KB) to Downloads.`);
+    setPhase("idle");
+
+    if (nextCount >= TARGET_PER_SIGN && index < signs.length - 1) {
+      setIndex(index + 1);
+    }
+  };
+
+  const undoLast = () => {
+    if (!current) return;
+    const c = counts[current.sign_id] ?? 0;
+    if (c <= 0) return;
+    const updated = { ...counts, [current.sign_id]: c - 1 };
+    setCounts(updated);
+    localStorage.setItem(`capture_counts_${signerId}`, JSON.stringify(updated));
+    setStatus(
+      `Decremented count for ${current.gloss}. ` +
+        (lastFilename
+          ? `Delete ${lastFilename} from your Downloads folder if you want to discard it.`
+          : "Note: the file is still in Downloads; delete it manually if you want to discard.")
+    );
+    setLastFilename(null);
+  };
+
+  const recording = phase === "recording";
+  const countingDown = phase === "countdown";
+  const busy = recording || countingDown || phase === "saving";
+
+  if (signs.length === 0) {
+    return (
+      <div className="container">
+        <Link to="/lobby">← Lobby</Link>
+        <h1>Wave 1 Dataset Capture</h1>
+        <p>{status || "Loading trained sign list…"}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container">
+      <Link to="/lobby">← Lobby</Link>
+      <h1>Wave 1 Dataset Capture</h1>
+
+      <div className="card" style={{ marginBottom: "1rem" }}>
+        <strong>After recording</strong>
+        <ol style={{ margin: "0.5rem 0", paddingLeft: "1.25rem", color: "var(--muted)" }}>
+          <li>Move <code>.webm</code> files from Downloads to <code>{INCOMING_REL}</code></li>
+          <li>Run <code>scripts\continue-wave1.ps1</code> to import + retrain</li>
+        </ol>
+      </div>
+
+      <p style={{ color: "var(--muted)" }}>
+        Target: {TARGET_PER_SIGN}/sign · minimum {MIN_PER_SIGN}/sign to retrain · {RECORD_MS / 1000}s per clip.
+      </p>
+      <p>
+        {signerId}: <strong>{progress.totalClips}</strong> clips · {" "}
+        <strong>{progress.minDone}</strong>/{progress.total} at {MIN_PER_SIGN}+ · {" "}
+        <strong>{progress.done}</strong>/{progress.total} at {TARGET_PER_SIGN}+
+      </p>
+
+      {cameraError ? (
+        <div className="card status-fail">
+          <p>{cameraError}</p>
+        </div>
+      ) : (
+        <div className="video-wrap" style={{ position: "relative" }}>
+          <video ref={videoRef} muted playsInline />
+          <div className="guide-box" />
+          {countingDown && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "6rem",
+                fontWeight: 700,
+                color: "white",
+                textShadow: "0 0 10px rgba(0,0,0,0.7)",
+              }}
+            >
+              {countdown}
+            </div>
+          )}
+          {recording && (
+            <>
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  border: "6px solid #e23",
+                  pointerEvents: "none",
+                  boxSizing: "border-box",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  background: "#e23",
+                  color: "white",
+                  padding: "0.2rem 0.6rem",
+                  borderRadius: "4px",
+                  fontWeight: 700,
+                  fontSize: "0.9rem",
+                }}
+              >
+                ● REC
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      <div className="card" style={{ marginTop: "1rem" }}>
+        <p style={{ fontSize: "1.25rem", margin: 0 }}>
+          Sign {index + 1}/{signs.length}: <strong>{current.gloss}</strong>{" "}
+          <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({current.sign_id})</span>
+        </p>
+        <p style={{ marginTop: "0.25rem" }}>
+          Clips this sign: <strong>{counts[current.sign_id] ?? 0}</strong> / {TARGET_PER_SIGN}
+        </p>
+        {reference && (
+          <div className="hint-panel" style={{ marginTop: "0.5rem" }}>
+            <strong>Reference (perform this exact form)</strong>
+            <p style={{ margin: "0.25rem 0 0", fontSize: "0.9rem" }}>
+              <strong>Handshape:</strong> {reference.handshape}
+              <br />
+              <strong>Movement:</strong> {reference.movement}
+              <br />
+              <strong>Location:</strong> {reference.location}
+              <br />
+              <strong>Framing:</strong> {reference.framing}
+            </p>
+          </div>
+        )}
+        <label style={{ display: "block", marginTop: "0.5rem" }}>Signer ID</label>
+        <select
+          className="input"
+          value={signerId}
+          onChange={(e) => setSignerId(e.target.value)}
+          disabled={busy}
+        >
+          <option value="signer_a">signer_a</option>
+          <option value="signer_b">signer_b</option>
+          <option value="signer_c">signer_c</option>
+        </select>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
+          <button className="btn" onClick={startRecord} disabled={busy || !!cameraError}>
+            {busy ? phase : `Record ${RECORD_MS / 1000}s clip`}
+          </button>
+          <button className="btn btn-secondary" onClick={undoLast} disabled={busy || (counts[current.sign_id] ?? 0) === 0}>
+            Undo last
+          </button>
+          <button className="btn btn-secondary" disabled={index === 0 || busy} onClick={() => setIndex(index - 1)}>
+            Previous sign
+          </button>
+          <button
+            className="btn btn-secondary"
+            disabled={index >= signs.length - 1 || busy}
+            onClick={() => setIndex(index + 1)}
+          >
+            Next sign
+          </button>
+        </div>
+        {status && <p style={{ marginTop: "0.75rem", color: "var(--muted)", fontSize: "0.9rem" }}>{status}</p>}
+      </div>
+    </div>
+  );
+}

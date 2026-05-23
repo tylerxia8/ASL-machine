@@ -1,0 +1,126 @@
+"""Import Capture-page downloads (webm or legacy json) into ml/data/clips as .npz."""
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[2]
+INCOMING = ROOT / "ml" / "data" / "incoming"
+CLIPS = ROOT / "ml" / "data" / "clips"
+NUM_FRAMES, HEIGHT, WIDTH = 24, 160, 160
+
+
+def _resample(frames: np.ndarray, target: int) -> np.ndarray:
+    if frames.shape[0] == target:
+        return frames
+    idx = np.linspace(0, frames.shape[0] - 1, target).astype(int)
+    return frames[idx]
+
+
+def _normalize_frames(frames: np.ndarray) -> np.ndarray:
+    """Crop center square, resize to (HEIGHT, WIDTH), normalize to [0,1] float32."""
+    import cv2
+
+    out = np.empty((frames.shape[0], HEIGHT, WIDTH, 3), dtype=np.float32)
+    for i, frame in enumerate(frames):
+        h, w = frame.shape[:2]
+        side = min(h, w)
+        y0 = (h - side) // 2
+        x0 = (w - side) // 2
+        crop = frame[y0 : y0 + side, x0 : x0 + side]
+        resized = cv2.resize(crop, (WIDTH, HEIGHT), interpolation=cv2.INTER_AREA)
+        if resized.dtype != np.float32:
+            resized = resized.astype(np.float32)
+        if resized.max() > 1.0:
+            resized = resized / 255.0
+        out[i] = resized
+    return out
+
+
+def load_webm(path: Path) -> np.ndarray:
+    import cv2
+
+    cap = cv2.VideoCapture(str(path))
+    if not cap.isOpened():
+        raise ValueError(f"OpenCV could not open {path.name}")
+    frames: list[np.ndarray] = []
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    cap.release()
+    if not frames:
+        raise ValueError(f"No decodable frames in {path.name}")
+    arr = np.stack(frames)
+    arr = _resample(arr, NUM_FRAMES)
+    return _normalize_frames(arr)
+
+
+def load_json(path: Path) -> np.ndarray:
+    raw = json.loads(path.read_text(encoding="utf-8"))["frames"]
+    arr = np.array(raw, dtype=np.float32)
+    if arr.ndim != 4:
+        raise ValueError(f"Bad json clip shape {arr.shape} in {path.name}")
+    arr = _resample(arr, NUM_FRAMES)
+    if arr.max() > 1.0:
+        arr = arr / 255.0
+    return arr.astype(np.float32)
+
+
+def infer_meta(path: Path, data: dict | None) -> tuple[str, str]:
+    if data:
+        sign_id = data.get("sign_id")
+        signer_id = data.get("signer_id")
+        if sign_id and signer_id:
+            return sign_id, signer_id
+    stem = path.stem
+    m = re.match(r"^(.+)_(signer_[a-z0-9]+)_\d+$", stem)
+    if m:
+        return m.group(1), m.group(2)
+    parts = stem.split("_")
+    if len(parts) >= 3 and parts[-2].startswith("signer"):
+        return "_".join(parts[:-2]), "_".join(parts[-2:])
+    raise ValueError(f"Cannot infer sign_id/signer_id from {path.name}")
+
+
+def main():
+    INCOMING.mkdir(parents=True, exist_ok=True)
+    CLIPS.mkdir(parents=True, exist_ok=True)
+    files = sorted(list(INCOMING.glob("*.webm")) + list(INCOMING.glob("*.json")))
+    if not files:
+        print(f"No webm/json files in {INCOMING}. Download clips from /capture first.")
+        return
+
+    imported = 0
+    failed: list[tuple[str, str]] = []
+    for path in files:
+        try:
+            if path.suffix == ".webm":
+                frames = load_webm(path)
+                sign_id, signer_id = infer_meta(path, None)
+            else:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                frames = load_json(path)
+                sign_id, signer_id = infer_meta(path, data)
+            out_dir = CLIPS / sign_id / signer_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            existing = len(list(out_dir.glob("*.npz")))
+            out_path = out_dir / f"clip_{existing:04d}.npz"
+            np.savez_compressed(out_path, frames=frames)
+            imported += 1
+            print(f"Imported {path.name} -> {out_path.relative_to(ROOT)}")
+        except Exception as e:
+            failed.append((path.name, str(e)))
+            print(f"FAILED {path.name}: {e}")
+
+    print(f"\nDone: {imported} imported, {len(failed)} failed.")
+    if imported:
+        print("Next: python ml/scripts/build_manifest.py --wave1 --signer-disjoint")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.venv/
+.vendor/
+ml/.venv/
+apps/web/node_modules/
+apps/api/.vendor/
+
+# Build output
+dist/
+apps/web/dist/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env / secrets
+.env
+.env.local
+
+# Local databases
+*.db
+
+# Captured / generated dataset artifacts — large binaries, regenerable
+ml/data/clips/
+ml/data/raw/
+ml/data/incoming/
+ml/data/semlex/
+ml/checkpoints/
+
+# ml/data/learner_samples/ IS committed: ~12 MB of human-recorded webms
+# kept as a learner-quality reference set distinct from native-signer SemLex data.
+
+# Exported model artifacts — published as GitHub Release assets, not in repo
+ml/exports/
+apps/web/public/models/model.onnx
+apps/web/public/models/model_meta.json
+# labels.json IS committed so the web app shows class names even before the model is pulled
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Recycle / scratch
+.trash/
+*.tmp

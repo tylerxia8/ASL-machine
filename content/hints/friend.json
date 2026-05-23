@@ -1,0 +1,10 @@
+{
+  "sign_id": "friend",
+  "gloss": "Friend",
+  "handshape": "Both hands in X handshape (index curled into a hook, others closed).",
+  "movement": "Hook the dominant index over the non-dominant index. Then unhook, flip both hands, and hook again with the other on top.",
+  "location": "Neutral space at chest height.",
+  "orientation": "Indexes curl into each other; alternating hand on top.",
+  "framing": "Both hands at the midline; the two-hook sequence is one continuous motion.",
+  "common_confusions": "Two clear hooks (top-then-flip). Not a single hook."
+}
