@@ -1,0 +1,172 @@
+name: Train Wave 1
+
+# Manual training run on a GitHub-hosted runner. Produces:
+#   - ml/exports/model.onnx (uploaded as a release asset)
+#   - ml/exports/labels.json
+#   - ml/exports/model_meta.json
+#   - docs/VALIDATION_REPORT.md (auto-metrics block populated)
+#
+# No CUDA / GPU required: the SignClipCNN3D is small enough to train on
+# the standard 4-core / 7 GB / 14 GB-disk ubuntu-latest runner.
+#
+# Inputs:
+#   - dataset_source: "learner_samples" (committed 25 webms, tiny smoke), or
+#                     "semlex" (downloads SemLex via fetch_semlex.py), or
+#                     "both" (combines them).
+#
+# Required secret for SemLex paths:
+#   - SEMLEX_INDEX_URL: URL to the SemLex index file emailed to you after
+#     accepting their terms of use:
+#     https://docs.google.com/forms/d/e/1FAIpQLSeFjIcbJcr2kWibgrEdFyLhNADo1ErnVGuQHtGeiDiqe4iteQ/viewform
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset_source:
+        description: "Where the training data comes from"
+        type: choice
+        options:
+          - learner_samples
+          - semlex
+          - both
+        default: learner_samples
+      semlex_clips_per_sign:
+        description: "Cap per sign when pulling from SemLex (ignored otherwise)"
+        type: number
+        default: 50
+      epochs:
+        description: "Training epochs"
+        type: number
+        default: 20
+      model_version:
+        description: "Model version tag (also used for release tag)"
+        type: string
+        default: wave1-ci-v1
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # needed to create a release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ml/requirements.txt
+
+      - name: Install ML deps (CPU torch, smaller than default CUDA build)
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install -r ml/requirements.txt onnxscript
+
+      - name: Stage learner_samples (if requested)
+        if: inputs.dataset_source == 'learner_samples' || inputs.dataset_source == 'both'
+        run: |
+          mkdir -p ml/data/incoming
+          cp ml/data/learner_samples/signer_a/*.webm ml/data/incoming/
+          echo "Staged $(ls ml/data/incoming/*.webm | wc -l) learner webms"
+
+      - name: Cache SemLex downloads
+        if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
+        uses: actions/cache@v4
+        with:
+          path: ml/data/semlex
+          key: semlex-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_clips_per_sign }}
+
+      - name: Fetch SemLex subset
+        if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
+        env:
+          SEMLEX_INDEX_URL: ${{ secrets.SEMLEX_INDEX_URL }}
+          SEMLEX_CLIPS_PER_SIGN: ${{ inputs.semlex_clips_per_sign }}
+        run: |
+          if [ -z "$SEMLEX_INDEX_URL" ]; then
+            echo "ERROR: SEMLEX_INDEX_URL secret not set. Add it under repo Settings → Secrets and variables → Actions." >&2
+            exit 1
+          fi
+          python ml/scripts/fetch_semlex.py
+
+      - name: Decode videos → .npz
+        run: python ml/scripts/import_captures.py
+
+      - name: Build manifest (signer-disjoint when ≥3 signers, else random split)
+        run: python ml/scripts/build_manifest.py --wave1 --signer-disjoint
+
+      - name: Dataset summary
+        run: |
+          python -c "
+          import json
+          from collections import Counter
+          with open('ml/data/manifest.json') as f:
+              m = json.load(f)
+          splits = Counter(c['split'] for c in m['clips'])
+          per_sign = Counter(c['sign_id'] for c in m['clips'])
+          print(f'Total clips: {len(m[\"clips\"])}')
+          print(f'Splits: {dict(splits)}')
+          print(f'Classes with data: {len(per_sign)}/{len(m[\"sign_ids\"])}')
+          for s in sorted(per_sign):
+              print(f'  {s:20s} {per_sign[s]}')
+          "
+
+      - name: Train
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/train.py \
+            --manifest ml/data/manifest.json \
+            --epochs ${{ inputs.epochs }} \
+            --model-version ${{ inputs.model_version }}
+
+      - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/eval.py \
+            --checkpoint ml/checkpoints/${{ inputs.model_version }}/best.pt \
+            --manifest ml/data/manifest.json
+
+      - name: Export ONNX
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/export_onnx.py \
+            --checkpoint ml/checkpoints/${{ inputs.model_version }}/best.pt
+          ls -lh ml/exports/
+
+      - name: Upload artifacts (always)
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ inputs.model_version }}
+          path: |
+            ml/exports/model.onnx
+            ml/exports/labels.json
+            ml/exports/model_meta.json
+            ml/exports/eval_metrics.json
+            docs/VALIDATION_REPORT.md
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.model_version }}
+          name: "Model ${{ inputs.model_version }}"
+          body: |
+            Trained from scratch on dataset source: `${{ inputs.dataset_source }}`.
+            Epochs: ${{ inputs.epochs }}.
+
+            ## Files
+            - `model.onnx` — drop into `apps/web/public/models/`
+            - `labels.json` — drop into `apps/web/public/models/`
+            - `model_meta.json` — drop into `apps/web/public/models/`
+            - `eval_metrics.json` — raw classification report + accuracy
+            - `VALIDATION_REPORT.md` — full report with auto-metrics block
+
+            See `docs/VALIDATION_REPORT.md` in the repo for the narrative.
+          files: |
+            ml/exports/model.onnx
+            ml/exports/labels.json
+            ml/exports/model_meta.json
+            ml/exports/eval_metrics.json
+            docs/VALIDATION_REPORT.md

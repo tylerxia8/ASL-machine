@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   web:
@@ -16,6 +17,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
       - run: npm ci || npm install
       - run: npm run lint
       - run: npm test
@@ -30,18 +33,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r requirements.txt pytest
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+      - run: pip install -r requirements.txt pytest httpx
       - run: pytest tests/ -q
 
-  ml-eval:
+  ml-smoke:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - run: pip install -r ml/requirements.txt
-      - run: python ml/scripts/generate_synthetic_dataset.py --signs 10 --clips-per-sign 20
-      - run: python ml/train.py --epochs 2 --model-version ci
-      - run: python ml/export_onnx.py --checkpoint ml/checkpoints/ci/best.pt
-      - run: python ml/eval.py --checkpoint ml/checkpoints/ci/best.pt
+          cache: pip
+          cache-dependency-path: ml/requirements.txt
+      # CPU-only torch wheel — much smaller than default which pulls CUDA libs
+      - name: Install ML deps
+        run: |
+          pip install --index-url https://download.pytorch.org/whl/cpu torch
+          pip install -r ml/requirements.txt onnxscript
+      # Architecture + export + ONNX-runtime equivalence (no real training data needed)
+      - name: Smoke-test pipeline (build → forward → ONNX export → ORT load → numerical match)
+        run: python ml/scripts/smoke_pipeline.py
+      # Splice logic for validation report
+      - name: Smoke-test eval splice
+        run: python ml/scripts/test_eval_splice.py

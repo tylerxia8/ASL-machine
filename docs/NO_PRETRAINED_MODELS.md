@@ -1,35 +1,79 @@
-# No Pretrained Models � Attestation
+# No Pretrained Models — Attestation
 
-## Requirement
+## Requirement (rubric Req 7)
 
-Per project rubric, the sign recognition system must **not** use pretrained weights for:
+The sign recognition system must **not** use pretrained weights for:
 
-- Sign language classifiers
-- Hand/pose landmark detectors
+- Sign language classifiers (including SemLex's SL-GCN models)
+- Hand or pose landmark detectors (MediaPipe Hands/Pose, OpenPose, MMPose)
 - Feature extractors
-- General-purpose CV backbones (e.g., ResNet trained on ImageNet)
+- General-purpose CV backbones (e.g., ResNet/EfficientNet trained on ImageNet, I3D trained on Kinetics)
 
-## This project
+## This project's architecture
 
 | Component | Approach |
 |-----------|----------|
-| Model | `SignClipCNN3D` in `ml/model.py` � PyTorch modules with default random initialization |
-| Training | `ml/train.py` trains from scratch on team/synthetic clips |
-| Inference | Exported ONNX consumed by `onnxruntime-web` in the browser |
-| Input | Raw RGB frame tensors (160�160), no MediaPipe landmarks |
+| Model | [`SignClipCNN3D`](../ml/model.py) — 3-block Conv3d → AvgPool3d → FC. All weights `kaiming_normal_` initialized at instantiation. ~3.57M params. |
+| Training | [`ml/train.py`](../ml/train.py) initializes a fresh model each run; no checkpoint loading from external sources. |
+| Inference | Exported ONNX consumed by `onnxruntime-web` in the browser. ONNX Runtime is an *execution framework*, not pretrained weights. |
+| Input | Raw RGB frame tensors at (3, 24, 160, 160) directly into the CNN. **No pose/landmark features.** |
+
+## Dataset attestation
+
+The Wave 1 model is trained on a combination of:
+
+1. **Self-recorded learner clips** in [`ml/data/learner_samples/`](../ml/data/learner_samples/), captured via the in-app `/capture` flow.
+2. **Sem-Lex Benchmark videos** ([leekezar/SemLex](https://github.com/leekezar/SemLex), Apache-2.0). We use **only the raw videos** from this dataset; the Sem-Lex repository also distributes pretrained SL-GCN models, **which we do not use**. Our pipeline never imports, downloads, or references those model files. See [`ml/scripts/fetch_semlex.py`](../ml/scripts/fetch_semlex.py) — it touches only the video index, never the model artifacts.
+
+External video data is permitted under rubric Req 6 (which speaks of "curating or collecting" the dataset). Req 7 is specifically about pretrained model **weights**, not source videos.
 
 ## Dependency audit
 
-**ML (`ml/requirements.txt`):** torch, numpy, onnx, onnxruntime, pillow, opencv-python (I/O only), scikit-learn (metrics only).
+Production ML stack ([`ml/requirements.txt`](../ml/requirements.txt)): `torch`, `numpy`, `onnx`, `onnxruntime`, `pillow`, `opencv-python-headless`, `scikit-learn`, `tqdm`.
 
-**Explicitly excluded from pipeline:** mediapipe, ultralytics, timm, torchvision.models pretrained APIs, tensorflow hub, huggingface transformers for vision.
+**Explicitly excluded from the recognition pipeline:**
+
+- `mediapipe`, `mediapipe-tasks` (pretrained hand/pose landmarks)
+- `torchvision.models.*` with `weights=...` arguments
+- `timm`, `transformers`, `tensorflow_hub`
+- `ultralytics`, `mmpose`, `openpose`
+- SemLex's published SL-GCN checkpoints (raw videos only)
+
+OpenCV is used **only for video decoding and pixel resize** ([`ml/scripts/import_captures.py`](../ml/scripts/import_captures.py)), not for any pretrained DNN module. scikit-learn is used **only for the eval metrics** (`classification_report`, `confusion_matrix`).
 
 ## Verification steps
 
-1. Inspect `ml/model.py` � no `pretrained=True` or weight download URLs.
-2. Run `grep -r "pretrained\|mediapipe\|torchvision.models" ml/` � should return no production usage.
-3. Training logs record `model_version` and initialization note in `model_meta.json`.
+You can reproduce the attestation locally:
+
+```bash
+# 1. No pretrained imports in production code
+grep -rE "pretrained|from_pretrained|mediapipe|torchvision\.models|timm\.|transformers|tensorflow_hub|ultralytics" \
+  ml/*.py ml/scripts/*.py apps/api/*.py apps/web/src/
+
+# 2. SemLex pretrained models never referenced
+grep -rE "SL-GCN|SLGCN|sl_gcn|sl-gcn\.pt|gloss_recognition\.pt" \
+  ml/ apps/ scripts/
+
+# 3. Model file confirms random init
+python -c "from ml.model import build_model; m = build_model(25); print([(n, p.requires_grad) for n, p in m.named_parameters()][:5])"
+
+# 4. CI re-runs the smoke pipeline on every push (build → forward → ONNX → ORT load → numerical match)
+#    See .github/workflows/ci.yml
+```
 
 ## Frameworks allowed
 
-PyTorch, ONNX, ONNX Runtime Web, OpenCV for resize/color � processing only, not recognition weights.
+| Framework | Role | Pretrained? |
+|---|---|---|
+| PyTorch | Model definition + training | No — only `nn.Module` primitives + `kaiming_normal_` init |
+| ONNX Runtime / ONNX Runtime Web | Inference execution | No — execution framework only |
+| OpenCV (headless) | Video decoding, resize | No — pure pixel I/O |
+| scikit-learn | Metrics (precision/recall/F1/confusion matrix) | No — classical metrics |
+
+## Sign-off
+
+| Field | Value |
+|---|---|
+| Attestation version | 1.0 |
+| Last verified | _(populate with the date of your last `grep` audit)_ |
+| Reviewer | _(name + date)_ |
