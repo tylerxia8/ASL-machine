@@ -232,14 +232,19 @@ def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
     """
     counts: dict[str, int] = dict(existing_counts) if existing_counts else {}
     extracted = 0
+    sample_members: list[str] = []
+    members_scanned = 0
     print(f"\nStreaming {tar_path.name} → extracting only matched videos...")
     # mode='r|gz' is the streaming reader (no seek; one pass).
     with tarfile.open(tar_path, mode="r|gz") as tar:
         for i, member in enumerate(tar, start=1):
+            members_scanned = i
             if i % 5000 == 0:
                 print(f"  scanned {i} members ({extracted} extracted so far)")
             if not member.isfile():
                 continue
+            if len(sample_members) < 5:
+                sample_members.append(member.name)
             mem_path = Path(member.name)
             # Try both forms — bare video_id (Sem-Lex metadata) vs filename.ext (tar member).
             meta = wanted.get(mem_path.name) or wanted.get(mem_path.stem)
@@ -260,7 +265,14 @@ def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
                         break
                     dst.write(chunk)
             extracted += 1
-    print(f"  done: {extracted} videos extracted from {tar_path.name}")
+    print(f"  done: scanned {members_scanned} members, extracted {extracted} from {tar_path.name}")
+    if extracted == 0:
+        # Diagnostic: show what the member names actually look like so we
+        # can fix the basename-vs-stem matching for this archive.
+        print(f"  ⚠ ZERO extracted. First {len(sample_members)} tar member names (for matching diagnosis):", file=sys.stderr)
+        for name in sample_members:
+            print(f"    {name!r}  (basename={Path(name).name!r} stem={Path(name).stem!r})", file=sys.stderr)
+        print(f"  ⚠ Metadata expects keys like (first 3): {list(wanted.keys())[:3]}", file=sys.stderr)
     if existing_counts is not None:
         existing_counts.update(counts)
     return extracted
@@ -344,6 +356,16 @@ def main() -> int:
         print(f"\n⚠ {len(zero_coverage)} sign(s) extracted ZERO Sem-Lex videos: {zero_coverage}")
         print("  → If unexpected, check the metadata CSV's gloss column and extend GLOSS_MAP_DEFAULT.")
         print("  → Combine with --dataset_source=both at workflow level to backfill from learner_samples.")
+
+    # Fail loudly if we extracted nothing at all — keeps the workflow from
+    # silently progressing through decode + manifest steps that would then
+    # break far downstream.
+    if total_extracted == 0:
+        print("\nFATAL: extracted 0 videos total. Likely causes:", file=sys.stderr)
+        print("  - Tarball member basenames do not match metadata video_ids", file=sys.stderr)
+        print("  - All matched videos were in splits not requested by SEMLEX_DRIVE_FILES", file=sys.stderr)
+        print("  - SEMLEX_CLIPS_PER_SIGN cap is 0", file=sys.stderr)
+        return 3
 
     print("\nNext: python ml/scripts/import_captures.py && python ml/scripts/build_manifest.py --wave1 --signer-disjoint")
     return 0

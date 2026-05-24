@@ -87,25 +87,40 @@ def infer_meta(path: Path, data: dict | None) -> tuple[str, str]:
     raise ValueError(f"Cannot infer sign_id/signer_id from {path.name}")
 
 
+VIDEO_EXTS = (".webm", ".mp4", ".mov", ".mkv", ".avi")
+
+
 def main():
+    import sys
+
     INCOMING.mkdir(parents=True, exist_ok=True)
     CLIPS.mkdir(parents=True, exist_ok=True)
-    files = sorted(list(INCOMING.glob("*.webm")) + list(INCOMING.glob("*.json")))
+    files: list[Path] = []
+    for ext in VIDEO_EXTS:
+        files.extend(INCOMING.glob(f"*{ext}"))
+    files.extend(INCOMING.glob("*.json"))  # legacy capture-page format
+    files = sorted(files)
     if not files:
-        print(f"No webm/json files in {INCOMING}. Download clips from /capture first.")
-        return
+        print(f"No video files in {INCOMING}. Expected one of {VIDEO_EXTS} or *.json.",
+              file=sys.stderr)
+        raise SystemExit(2)
+
+    print(f"Found {len(files)} input file(s) "
+          f"({sum(1 for f in files if f.suffix in VIDEO_EXTS)} video, "
+          f"{sum(1 for f in files if f.suffix == '.json')} legacy json).")
 
     imported = 0
     failed: list[tuple[str, str]] = []
     for path in files:
         try:
-            if path.suffix == ".webm":
-                frames = load_webm(path)
-                sign_id, signer_id = infer_meta(path, None)
-            else:
+            if path.suffix == ".json":
                 data = json.loads(path.read_text(encoding="utf-8"))
                 frames = load_json(path)
                 sign_id, signer_id = infer_meta(path, data)
+            else:
+                # cv2.VideoCapture handles webm/mp4/mov/mkv/avi via FFmpeg.
+                frames = load_webm(path)
+                sign_id, signer_id = infer_meta(path, None)
             out_dir = CLIPS / sign_id / signer_id
             out_dir.mkdir(parents=True, exist_ok=True)
             existing = len(list(out_dir.glob("*.npz")))
@@ -115,9 +130,13 @@ def main():
             print(f"Imported {path.name} -> {out_path.relative_to(ROOT)}")
         except Exception as e:
             failed.append((path.name, str(e)))
-            print(f"FAILED {path.name}: {e}")
+            print(f"FAILED {path.name}: {e}", file=sys.stderr)
 
     print(f"\nDone: {imported} imported, {len(failed)} failed.")
+    if imported == 0:
+        print("FATAL: 0 imports succeeded. Failures above show the underlying cause "
+              "(missing codec, corrupt file, unparseable filename, etc.).", file=sys.stderr)
+        raise SystemExit(3)
     if imported:
         print("Next: python ml/scripts/build_manifest.py --wave1 --signer-disjoint")
 

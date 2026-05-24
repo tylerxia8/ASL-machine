@@ -51,8 +51,8 @@ def main():
         )
 
     if not clips:
-        print("No clips found. Import captures first.")
-        return
+        print("No clips found. Import captures first.", file=__import__("sys").stderr)
+        raise SystemExit(2)
 
     manifest_clips = []
     if args.signer_disjoint:
