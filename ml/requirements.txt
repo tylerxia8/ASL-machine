@@ -7,7 +7,9 @@ pillow>=10.0.0
 opencv-python>=4.8.0
 scikit-learn>=1.3.0
 tqdm>=4.66.0
-# Google Drive downloader used by ml/scripts/fetch_semlex.py to pull the
-# Sem-Lex video tarballs in CI. Handles Drive's large-file confirmation page
-# that plain urllib.request cannot.
+# Google Drive downloader for ml/scripts/fetch_semlex.py — used for the
+# small metadata CSV. The large video tarballs are stream-downloaded via
+# `requests` directly (gdown writes to disk; we can't afford that for the
+# 23.7 GB train tarball on a 14 GB runner).
 gdown>=5.2.0
+requests>=2.31.0

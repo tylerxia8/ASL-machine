@@ -136,7 +136,12 @@ def pick_column(fieldnames: Iterable[str], candidates: Iterable[str]) -> str | N
 
 
 def _gdown_to(file_id: str, dest: Path) -> Path:
-    """Download a Google Drive file by ID. Resumes if dest is partially complete."""
+    """Download a small Google Drive file (used only for the metadata CSV).
+
+    For large tarballs see `open_drive_download_stream()` — those are streamed
+    directly into tarfile to avoid landing them on disk (the train tarball
+    alone is 23.7 GB, larger than the GitHub-hosted runner's ephemeral disk).
+    """
     import gdown
     dest.parent.mkdir(parents=True, exist_ok=True)
     url = f"https://drive.google.com/uc?id={file_id}"
@@ -146,6 +151,55 @@ def _gdown_to(file_id: str, dest: Path) -> Path:
         raise RuntimeError(f"gdown produced empty/missing file at {dest}")
     print(f"  done: {dest.stat().st_size / 1e6:.1f} MB")
     return dest
+
+
+def open_drive_download_stream(file_id: str):
+    """Return a streaming requests.Response for a Google Drive file.
+
+    Handles Drive's "virus scan can't run" interstitial for files > ~100 MB by
+    either pulling the `download_warning_*` cookie (legacy UX) or parsing the
+    confirm/uuid params from the HTML form (current UX). The returned response
+    is configured so `resp.raw.read(n)` yields raw tarball bytes (no HTTP-level
+    decoding), suitable for `tarfile.open(fileobj=resp.raw, mode="r|gz")`.
+    """
+    import requests
+    session = requests.Session()
+    base = "https://drive.google.com/uc"
+    params = {"export": "download", "id": file_id}
+    resp = session.get(base, params=params, stream=True, allow_redirects=True)
+    ctype = resp.headers.get("Content-Type", "").lower()
+
+    if "text/html" in ctype:
+        # Legacy: a download_warning_* cookie carries the confirm token.
+        token = next(
+            (v for k, v in session.cookies.items() if k.startswith("download_warning")),
+            None,
+        )
+        if token:
+            params["confirm"] = token
+            resp.close()
+            resp = session.get(base, params=params, stream=True, allow_redirects=True)
+        else:
+            # Current: parse the confirm + uuid out of the HTML form.
+            html = resp.text
+            uuid_match = re.search(r'name="uuid"\s+value="([^"]+)"', html)
+            id_match = re.search(r'name="id"\s+value="([^"]+)"', html)
+            params2 = {
+                "export": "download",
+                "id": id_match.group(1) if id_match else file_id,
+                "confirm": "t",
+            }
+            if uuid_match:
+                params2["uuid"] = uuid_match.group(1)
+            resp.close()
+            resp = session.get(base, params=params2, stream=True, allow_redirects=True)
+
+    resp.raise_for_status()
+    # We want the raw .tar.gz bytes; tarfile will gunzip them. If urllib3
+    # were to auto-decompress (Content-Encoding: gzip) we'd get double-decode
+    # garbage — explicitly disable.
+    resp.raw.decode_content = False
+    return resp
 
 
 def load_metadata(csv_path: Path, wave1: list[str], override: dict[str, list[str]]
@@ -222,67 +276,120 @@ def load_metadata(csv_path: Path, wave1: list[str], override: dict[str, list[str
     return matches
 
 
-def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
-                   cap_per_sign: int, out_dir: Path,
-                   existing_counts: dict[str, int] | None = None) -> int:
-    """Sequentially stream tar.gz; extract only members whose name matches.
+def _extract_from_tar_stream(
+    tar_stream,
+    role_label: str,
+    wanted: dict[str, tuple[str, str, str]],
+    cap_per_sign: int,
+    out_dir: Path,
+    existing_counts: dict[str, int] | None = None,
+) -> int:
+    """Extract matched videos from any streaming tar.gz source.
 
-    Probes BOTH the member's full basename (e.g. `abc123.mp4`) and its stem
-    (e.g. `abc123`) — Sem-Lex's metadata key is the bare `video_id` while the
-    tar member adds an extension.
-
-    `existing_counts` lets the caller carry per-sign counts across multiple
-    tar archives so the cap is enforced globally, not per-archive.
+    Works with both an on-disk file (passed via tarfile.open(path, mode='r|gz'))
+    and a live HTTP response (passed via tarfile.open(fileobj=..., mode='r|gz')).
+    The mode='r|gz' (with the pipe) is the key — sequential, no seek required.
     """
     counts: dict[str, int] = dict(existing_counts) if existing_counts else {}
     extracted = 0
     sample_members: list[str] = []
     members_scanned = 0
-    print(f"\nStreaming {tar_path.name} → extracting only matched videos...")
-    # mode='r|gz' is the streaming reader (no seek; one pass).
-    with tarfile.open(tar_path, mode="r|gz") as tar:
-        for i, member in enumerate(tar, start=1):
-            members_scanned = i
-            if i % 5000 == 0:
-                print(f"  scanned {i} members ({extracted} extracted so far)")
-            if not member.isfile():
-                continue
-            if len(sample_members) < 5:
-                sample_members.append(member.name)
-            mem_path = Path(member.name)
-            # Try both forms — bare video_id (Sem-Lex metadata) vs filename.ext (tar member).
-            meta = wanted.get(mem_path.name) or wanted.get(mem_path.stem)
-            if not meta:
-                continue
-            sign_id, signer_id, _split = meta
-            if counts.get(sign_id, 0) >= cap_per_sign:
-                continue
-            ext = mem_path.suffix.lower() or ".mp4"
-            counts[sign_id] = counts.get(sign_id, 0) + 1
-            # Filename must match import_captures.py's regex:
-            #   ^(.+)_(signer_[a-z0-9]+)_\d+$
-            # signer_id already includes the "signer_" prefix from load_metadata.
-            target = out_dir / f"{sign_id}_{signer_id}_{counts[sign_id]:04d}{ext}"
-            with tar.extractfile(member) as src, open(target, "wb") as dst:
-                if src is None:
-                    continue
-                while True:
-                    chunk = src.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    dst.write(chunk)
-            extracted += 1
-    print(f"  done: scanned {members_scanned} members, extracted {extracted} from {tar_path.name}")
+    all_signs_capped_logged = False
+
+    for i, member in enumerate(tar_stream, start=1):
+        members_scanned = i
+        if i % 5000 == 0:
+            print(f"  scanned {i} members ({extracted} extracted so far) — "
+                  f"caps hit: {sum(1 for c in counts.values() if c >= cap_per_sign)}/{len(wanted) and len(set(m[0] for m in wanted.values()))}")
+        if not member.isfile():
+            continue
+        if len(sample_members) < 5:
+            sample_members.append(member.name)
+        mem_path = Path(member.name)
+        meta = wanted.get(mem_path.name) or wanted.get(mem_path.stem)
+        if not meta:
+            continue
+        sign_id, signer_id, _split = meta
+        if counts.get(sign_id, 0) >= cap_per_sign:
+            continue
+        ext = mem_path.suffix.lower() or ".mp4"
+        counts[sign_id] = counts.get(sign_id, 0) + 1
+        target = out_dir / f"{sign_id}_{signer_id}_{counts[sign_id]:04d}{ext}"
+        src = tar_stream.extractfile(member)
+        if src is None:
+            continue
+        with src, open(target, "wb") as dst:
+            while True:
+                chunk = src.read(1024 * 1024)
+                if not chunk:
+                    break
+                dst.write(chunk)
+        extracted += 1
+
+        # Early-stop optimization: if every sign in `wanted` has hit its cap,
+        # we can stop scanning the rest of the tarball. Especially valuable
+        # for the 23 GB train tarball — Sem-Lex's videos appear in a roughly
+        # gloss-ordered layout, so most caps fill in the first few GB.
+        unique_signs = {m[0] for m in wanted.values()}
+        if all(counts.get(s, 0) >= cap_per_sign for s in unique_signs):
+            if not all_signs_capped_logged:
+                print(f"  ✓ all {len(unique_signs)} signs hit cap_per_sign={cap_per_sign}; "
+                      f"stopping {role_label} scan early (saves bandwidth + disk)")
+                all_signs_capped_logged = True
+            break
+
+    print(f"  done {role_label}: scanned {members_scanned} members, extracted {extracted}")
     if extracted == 0:
-        # Diagnostic: show what the member names actually look like so we
-        # can fix the basename-vs-stem matching for this archive.
-        print(f"  ⚠ ZERO extracted. First {len(sample_members)} tar member names (for matching diagnosis):", file=sys.stderr)
+        print(f"  ⚠ ZERO extracted from {role_label}. First {len(sample_members)} tar member names:", file=sys.stderr)
         for name in sample_members:
             print(f"    {name!r}  (basename={Path(name).name!r} stem={Path(name).stem!r})", file=sys.stderr)
         print(f"  ⚠ Metadata expects keys like (first 3): {list(wanted.keys())[:3]}", file=sys.stderr)
     if existing_counts is not None:
         existing_counts.update(counts)
     return extracted
+
+
+def stream_extract_from_drive(
+    file_id: str,
+    role_label: str,
+    wanted: dict[str, tuple[str, str, str]],
+    cap_per_sign: int,
+    out_dir: Path,
+    existing_counts: dict[str, int] | None = None,
+) -> int:
+    """Streaming download + streaming tar extract — the tarball never lands on disk.
+
+    Peak disk = total bytes of *matched* videos only (~1–2 GB). Source tarball
+    can be arbitrarily large (Sem-Lex's train.tar.gz is 23.7 GB).
+    """
+    print(f"\nStreaming {role_label}.tar.gz (Drive ID {file_id[:8]}…) — never saved to disk")
+    resp = open_drive_download_stream(file_id)
+    total_bytes = resp.headers.get("Content-Length")
+    if total_bytes:
+        print(f"  Source size: {int(total_bytes) / 1e9:.1f} GB (streamed, not stored)")
+    try:
+        with tarfile.open(fileobj=resp.raw, mode="r|gz") as tar:
+            return _extract_from_tar_stream(
+                tar, role_label, wanted, cap_per_sign, out_dir, existing_counts
+            )
+    finally:
+        resp.close()
+
+
+def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
+                   cap_per_sign: int, out_dir: Path,
+                   existing_counts: dict[str, int] | None = None) -> int:
+    """Stream-extract from an on-disk tar.gz (used for local testing only).
+
+    The production CI path uses `stream_extract_from_drive()` which never
+    writes the tarball to disk. This wrapper exists so a previously-downloaded
+    local tarball can still be re-processed without going over the wire.
+    """
+    print(f"\nStream-extracting on-disk {tar_path.name}...")
+    with tarfile.open(tar_path, mode="r|gz") as tar:
+        return _extract_from_tar_stream(
+            tar, tar_path.name, wanted, cap_per_sign, out_dir, existing_counts
+        )
 
 
 def main() -> int:
@@ -342,13 +449,11 @@ def main() -> int:
         if role not in drive_files:
             print(f"Skipping {role} (not in SEMLEX_DRIVE_FILES).")
             continue
-        tar_path = _gdown_to(drive_files[role], work_dir / f"{role}.tar.gz")
-        n = stream_extract(tar_path, wanted, args.clips_per_sign, out_dir,
-                           existing_counts=global_counts)
+        n = stream_extract_from_drive(
+            drive_files[role], role, wanted, args.clips_per_sign,
+            out_dir, existing_counts=global_counts,
+        )
         total_extracted += n
-        if not args.keep_tarballs:
-            tar_path.unlink(missing_ok=True)
-            print(f"  removed {tar_path.name} (saves space for next archive)")
 
     print(f"\nTotal extracted: {total_extracted} videos → {out_dir}")
     print("Per-sign extracted count (after per-sign cap):")
