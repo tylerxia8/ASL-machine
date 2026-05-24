@@ -31,6 +31,15 @@ export type ProgressSummary = {
   }[];
 };
 
+export type Mastery = {
+  sign_id: string;
+  mastered: boolean;
+  consecutive_passes: number;
+  total_attempts: number;
+  total_passes: number;
+  last_practiced_at: string | null;
+};
+
 async function headers(userId: string, token?: string): Promise<HeadersInit> {
   const h: Record<string, string> = { "Content-Type": "application/json", "X-User-Id": userId };
   if (token) h["Authorization"] = `Bearer ${token}`;
@@ -95,6 +104,12 @@ export async function recordAttempt(
 export async function fetchProgress(userId: string, token?: string): Promise<ProgressSummary> {
   const res = await fetch(`${API_URL}/progress`, { headers: await headers(userId, token) });
   if (!res.ok) throw new Error("Progress fetch failed");
+  return res.json();
+}
+
+export async function fetchMastery(userId: string, token?: string): Promise<Mastery[]> {
+  const res = await fetch(`${API_URL}/mastery`, { headers: await headers(userId, token) });
+  if (!res.ok) throw new Error("Mastery fetch failed");
   return res.json();
 }
 

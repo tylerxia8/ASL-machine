@@ -9,18 +9,22 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [submitting, setSubmitting] = useState(false);
 
   const continueDev = () => navigate("/lobby");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSubmitting(true);
     try {
       if (mode === "login") await signIn(email, password);
       else await signUp(email, password);
       navigate("/lobby");
     } catch (err) {
       setError((err as Error).message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -36,34 +40,49 @@ export default function LoginPage() {
             className="input"
             type="email"
             placeholder="Email"
+            autoComplete="email"
+            required
+            disabled={submitting}
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
           <input
             className="input"
             type="password"
-            placeholder="Password"
+            placeholder="Password (8+ characters)"
+            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            required
+            minLength={8}
+            disabled={submitting}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-          {error && <p className="status-fail">{error}</p>}
-          <button className="btn" type="submit" style={{ width: "100%" }}>
-            {mode === "login" ? "Log in" : "Register"}
+          {error && <p className="status-fail" role="alert">{error}</p>}
+          <button className="btn" type="submit" disabled={submitting} style={{ width: "100%" }}>
+            {submitting ? (mode === "login" ? "Logging in…" : "Registering…") : mode === "login" ? "Log in" : "Register"}
           </button>
         </form>
         <button
           className="btn btn-secondary"
+          type="button"
+          disabled={submitting}
           style={{ width: "100%", marginTop: "0.75rem" }}
-          onClick={() => setMode(mode === "login" ? "register" : "login")}
+          onClick={() => { setError(""); setMode(mode === "login" ? "register" : "login"); }}
         >
           {mode === "login" ? "Need an account? Register" : "Have an account? Log in"}
         </button>
         <hr style={{ borderColor: "var(--border)", margin: "1.25rem 0" }} />
-        <button className="btn btn-secondary" style={{ width: "100%" }} onClick={continueDev}>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          disabled={submitting}
+          style={{ width: "100%" }}
+          onClick={continueDev}
+        >
           Continue in dev mode ({devUserId.slice(0, 8)}…)
         </button>
         <p style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: "0.75rem" }}>
-          Dev mode uses local user id when Supabase is not configured.
+          Dev mode uses a local user id when Supabase is not configured. Your attempts persist in the local SQLite database.
         </p>
       </div>
     </div>
