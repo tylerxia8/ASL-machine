@@ -1,4 +1,5 @@
 import { flattenTensor } from "./camera";
+import { resolveSelectedSource } from "./modelSource";
 
 export type LabelsFile = {
   sign_ids: string[];
@@ -27,29 +28,41 @@ export function getLabels() {
 }
 
 async function doLoad(): Promise<{ version: string; numClasses: number }> {
-  const labelsRes = await fetch("/models/labels.json");
+  const source = await resolveSelectedSource();
+  const labelsRes = await fetch(source.labelsUrl);
   if (!labelsRes.ok) {
     throw new ModelUnavailableError(
-      "labels.json not found at /models/labels.json. Run npm run sync-model after training."
+      `labels.json not found at ${source.labelsUrl}. Run npm run sync-model after training, or pick a different model source in the Lobby.`
     );
   }
   labels = await labelsRes.json();
 
-  const head = await fetch("/models/model.onnx", { method: "HEAD" });
-  if (!head.ok) {
-    throw new ModelUnavailableError(
-      "model.onnx not found at /models/model.onnx. Export the model and run npm run sync-model."
-    );
+  // Releases redirect through release-assets.githubusercontent.com on download
+  // — HEAD doesn't always return 200 there, so for non-bundled sources skip the
+  // HEAD check and let ort.InferenceSession.create report any failure.
+  if (source.id === "bundled") {
+    const head = await fetch(source.modelUrl, { method: "HEAD" });
+    if (!head.ok) {
+      throw new ModelUnavailableError(
+        `model.onnx not found at ${source.modelUrl}. Export the model and run npm run sync-model.`
+      );
+    }
   }
 
   const ort = await import("onnxruntime-web");
   ort.env.wasm.numThreads = 1;
-  session = await ort.InferenceSession.create("/models/model.onnx", {
+  session = await ort.InferenceSession.create(source.modelUrl, {
     executionProviders: ["wasm"],
   });
   inputName = session.inputNames[0] ?? "input";
 
   return { version: labels!.model_version, numClasses: labels!.sign_ids.length };
+}
+
+export function resetLoadCache() {
+  loadPromise = null;
+  session = null;
+  labels = null;
 }
 
 export async function loadModel() {

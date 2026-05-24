@@ -60,6 +60,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     if (supabase) await supabase.auth.signOut();
+    // Clear the dev fallback id too so a fresh dev session starts on next visit.
+    localStorage.removeItem("dev_user_id");
     setUser(null);
     setSession(null);
   };

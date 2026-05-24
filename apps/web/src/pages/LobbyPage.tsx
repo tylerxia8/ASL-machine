@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { checkApiHealth, createSession, fetchProgress } from "../lib/api";
+import {
+  BUNDLED_SOURCE,
+  ModelSource,
+  getSelectedSourceId,
+  listReleaseSources,
+  setSelectedSourceId,
+} from "../lib/modelSource";
 
 export default function LobbyPage() {
   const auth = useAuth();
@@ -10,18 +17,34 @@ export default function LobbyPage() {
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [apiUrl, setApiUrl] = useState("");
   const [modelInfo, setModelInfo] = useState("");
+  const [sources, setSources] = useState<ModelSource[]>([BUNDLED_SOURCE]);
+  const [selectedSourceId, setSelectedSourceIdState] = useState(getSelectedSourceId());
 
   useEffect(() => {
     checkApiHealth().then((h) => {
       setApiOk(h.ok);
       setApiUrl(h.url);
     });
-    fetch("/models/model_meta.json")
-      .then((r) => r.json())
-      .then((m) => setModelInfo(`${m.model_version} · ${m.num_classes} signs`))
-      .catch(() => setModelInfo("model unknown"));
     fetchProgress(userId, auth.session?.access_token).then(setProgress).catch(() => setProgress(null));
+    listReleaseSources().then((rs) => setSources([BUNDLED_SOURCE, ...rs]));
   }, [userId, auth.session]);
+
+  useEffect(() => {
+    const src = sources.find((s) => s.id === selectedSourceId) || BUNDLED_SOURCE;
+    fetch(src.metaUrl)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => setModelInfo(m ? `${m.model_version} · ${m.num_classes} signs` : "model unknown"))
+      .catch(() => setModelInfo("model unknown"));
+  }, [selectedSourceId, sources]);
+
+  const onModelChange = (id: string) => {
+    setSelectedSourceId(id);
+    setSelectedSourceIdState(id);
+    // Force a reload so the inference module re-fetches labels + model from the
+    // new source on next attempt. sessionStorage clears practice context too.
+    sessionStorage.clear();
+    window.location.reload();
+  };
 
   const startSession = async (wave: number) => {
     const sess = await createSession(userId, auth.session?.access_token);
@@ -35,10 +58,29 @@ export default function LobbyPage() {
     <div className="container">
       <h1>Practice Lobby</h1>
       <div className="card" style={{ marginBottom: "1rem", fontSize: "0.9rem" }}>
-        <span style={{ color: apiOk ? "var(--pass)" : apiOk === false ? "var(--fail)" : "var(--muted)" }}>
-          API {apiOk ? "connected" : apiOk === false ? "offline" : "checking…"} ({apiUrl})
-        </span>
-        <span style={{ marginLeft: "1rem", color: "var(--muted)" }}>Model: {modelInfo}</span>
+        <div>
+          <span style={{ color: apiOk ? "var(--pass)" : apiOk === false ? "var(--fail)" : "var(--muted)" }}>
+            API {apiOk ? "connected" : apiOk === false ? "offline" : "checking…"} ({apiUrl})
+          </span>
+          <span style={{ marginLeft: "1rem", color: "var(--muted)" }}>Model: {modelInfo}</span>
+        </div>
+        <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <label htmlFor="model-source" style={{ color: "var(--muted)" }}>Source:</label>
+          <select
+            id="model-source"
+            className="input"
+            style={{ maxWidth: "20rem" }}
+            value={selectedSourceId}
+            onChange={(e) => onModelChange(e.target.value)}
+          >
+            {sources.map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>
+            (page will reload on change)
+          </span>
+        </div>
       </div>
       <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--accent)" }}>
         <strong>Wave 1 track</strong>

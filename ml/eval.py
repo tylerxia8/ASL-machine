@@ -130,7 +130,17 @@ def main():
     metrics_path = ML_ROOT / "exports" / "eval_metrics.json"
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     with open(metrics_path, "w", encoding="utf-8") as f:
-        json.dump({"accuracy": acc, "report": report}, f, indent=2)
+        json.dump(
+            {
+                "accuracy": acc,
+                "report": report,
+                "sign_ids": sign_ids,
+                "confusion_matrix": cm.tolist(),
+                "model_version": ckpt.get("model_version", "unknown"),
+            },
+            f,
+            indent=2,
+        )
     print(f"Wrote {report_path} accuracy={acc:.4f}")
 
 
