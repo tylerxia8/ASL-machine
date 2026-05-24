@@ -33,6 +33,40 @@ This report covers the controlled production pilot of the ASL Learning with Comp
 
 See [`CONTROLLED_CONDITIONS.md`](CONTROLLED_CONDITIONS.md) for the operational protocol.
 
+### Per-sign Sem-Lex coverage (before training)
+
+Counted from `semlex_metadata.csv` filtered to our Wave 1 sign roster:
+
+| Sign | Sem-Lex clips (asllex + freetext) | Notes |
+|---|---|---|
+| `eat` | 597 | Mapped via `eat`, `eat_1`, `eat_2` variants |
+| `water` | 408 | |
+| `sleep` | 211 | |
+| `nice` | 165 | |
+| `friend` | 138 | |
+| `help` | 136 | |
+| `where` | 130 | |
+| `deaf` | 103 | Mapped via `deaf`, `deaf_1`, `deaf_2` |
+| `what` | 92 | Mapped via `what`, `what_1`, `what_2` |
+| `name` | 86 | |
+| `who` | 85 | |
+| `no` | 76 | |
+| `yes` | 66 | |
+| `one` | 65 | |
+| `two` | 49 | |
+| `sorry` | 39 | |
+| `thank_you` | 36 | |
+| `hello` | 33 | |
+| `goodbye` | 28 | Mapped via `goodbye`/`bye`/`good_bye` (Sem-Lex labels mostly `bye`) |
+| `please` | 27 | |
+| `meet` | 56 | |
+| `how` | 21 | low |
+| `three` | 21 | low |
+| `four` | **8** | very low — model accuracy will be weak on this sign |
+| `five` | **1** | **near-zero coverage in Sem-Lex.** Recognition will not work reliably. Treat as a training-data gap; the sign stays in the prompted roster for content completeness but the validation report below will show low recall. Mitigation: supplement with self-recorded `learner_samples` clips. |
+
+Per-sign cap (`semlex_clips_per_sign` workflow input, default 50) trims the high-count classes to keep the dataset balanced. The above counts are *available*, not necessarily *trained-on*.
+
 ## Threshold policy
 
 The browser inference layer uses three confidence bands ([`apps/web/src/lib/threshold.ts`](../apps/web/src/lib/threshold.ts)):
