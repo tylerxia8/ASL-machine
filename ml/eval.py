@@ -105,6 +105,50 @@ def main():
     model.eval()
 
     test_ds = SignClipDataset(Path(args.manifest), "test", label_to_idx)
+    if len(test_ds) == 0:
+        # No test clips at all. This happens when --signer-disjoint can't find
+        # a holdout (e.g. dataset_source=both but Sem-Lex hit quota, leaving
+        # only signer_a). build_manifest.py should have already fallen back to
+        # a random split, so reaching here means the manifest is genuinely empty.
+        print("FATAL: test split has zero clips. Check build_manifest's split logic "
+              "and verify the manifest has entries with split='test'.", file=sys.stderr)
+        # Write a minimal, valid eval_metrics.json so the workflow can still
+        # publish the trained model.onnx as a release — accuracy reported as 0
+        # with a note in the auto-block.
+        metrics_path = ML_ROOT / "exports" / "eval_metrics.json"
+        metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "accuracy": 0.0,
+                    "report": {},
+                    "sign_ids": sign_ids,
+                    "confusion_matrix": [],
+                    "model_version": ckpt.get("model_version", "unknown"),
+                    "note": "test split was empty — eval skipped",
+                },
+                f,
+                indent=2,
+            )
+        # Still write the auto-metrics block (with a degraded marker) so the
+        # narrative + AUTO-METRICS contract is preserved.
+        auto_block = (
+            f"{AUTO_START}\n\n"
+            f"> Test split was empty (zero clips assigned to `split=test`).\n"
+            f"> Likely cause: only one unique signer in the dataset, or all\n"
+            f"> Sem-Lex splits hit Drive's daily quota.\n"
+            f"> Trained model is still published in the Release; rerun eval\n"
+            f"> with a manifest that has a non-empty test split.\n\n"
+            f"**Model version:** `{ckpt.get('model_version', 'unknown')}`  \n"
+            f"**Test accuracy:** _not computed (empty test set)_  \n"
+            f"**Classes:** {len(sign_ids)}\n\n"
+            f"{AUTO_END}\n"
+        )
+        report_path = Path(args.report)
+        existing = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
+        report_path.write_text(_splice(existing, auto_block), encoding="utf-8")
+        return  # exit 0 so the workflow continues to export ONNX + publish Release
+
     loader = DataLoader(test_ds, batch_size=16, shuffle=False)
     y_true: list[int] = []
     y_pred: list[int] = []

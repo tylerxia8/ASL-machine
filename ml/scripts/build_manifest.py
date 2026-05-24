@@ -72,18 +72,43 @@ def main():
             if s == "signer_a" or s in test_signers:
                 continue
             test_signers.add(s)
+
         if not test_signers:
-            print("WARNING: --signer-disjoint with only 1 unique signer → 0 test signers, "
-                  "0 test clips. eval.py will report empty test set. Add a second signer.",
+            # Only 1 unique signer (or the only available holdouts are excluded).
+            # Signer-disjoint isn't possible — fall back to a within-signer
+            # per-clip random split so eval still has data. The validation
+            # report should flag that the resulting test accuracy is NOT
+            # signer-disjoint (within-signer is a weaker metric).
+            print(f"WARNING: --signer-disjoint with {len(unique_signers)} unique signer(s) → "
+                  f"falling back to per-clip random {1 - args.test_ratio - args.val_ratio:.0%}/"
+                  f"{args.val_ratio:.0%}/{args.test_ratio:.0%} train/val/test split. "
+                  f"This is NOT signer-disjoint. Add more signers to get a Req-8-style eval.",
                   file=__import__("sys").stderr)
-        print(f"Signer-disjoint split: {len(test_signers)} test signer(s) "
-              f"out of {len(unique_signers)} unique: {sorted(test_signers) or 'none'}")
-        for c in clips:
-            if c["signer_id"] in test_signers:
-                split = "test"
-            else:
-                split = "train" if random.random() < 0.85 else "val"
-            manifest_clips.append({**c, "split": split})
+            by_sign = {}
+            for c in clips:
+                by_sign.setdefault(c["sign_id"], []).append(c)
+            for sign_id, group in sorted(by_sign.items()):
+                random.shuffle(group)
+                n = len(group)
+                n_te = max(1, int(n * args.test_ratio)) if n >= 3 else (1 if n >= 2 else 0)
+                n_va = max(1, int(n * args.val_ratio)) if n >= 3 else 0
+                for i, c in enumerate(group):
+                    if i < n_te:
+                        split = "test"
+                    elif i < n_te + n_va:
+                        split = "val"
+                    else:
+                        split = "train"
+                    manifest_clips.append({**c, "split": split})
+        else:
+            print(f"Signer-disjoint split: {len(test_signers)} test signer(s) "
+                  f"out of {len(unique_signers)} unique: {sorted(test_signers)}")
+            for c in clips:
+                if c["signer_id"] in test_signers:
+                    split = "test"
+                else:
+                    split = "train" if random.random() < 0.85 else "val"
+                manifest_clips.append({**c, "split": split})
     else:
         by_sign = {}
         for c in clips:
