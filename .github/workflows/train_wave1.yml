@@ -83,16 +83,27 @@ jobs:
           cp ml/data/learner_samples/signer_a/*.webm ml/data/incoming/
           echo "Staged $(ls ml/data/incoming/*.webm | wc -l) learner webms"
 
+      - name: Sanitize cache key components
+        # actions/cache@v4 rejects keys containing commas. The semlex_splits
+        # input is comma-separated (e.g. "train,val,test") so we substitute
+        # to hyphens here and reference the safe form in the cache key below.
+        if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
+        env:
+          SEMLEX_SPLITS: ${{ inputs.semlex_splits }}
+        run: |
+          splits_safe=$(printf '%s' "$SEMLEX_SPLITS" | tr ',' '-')
+          echo "SEMLEX_SPLITS_SAFE=$splits_safe" >> "$GITHUB_ENV"
+
       - name: Cache Sem-Lex extracted videos
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
         uses: actions/cache@v4
         with:
           # Cache the already-extracted per-sign videos (small: ~1–2 GB),
           # not the multi-GB raw tarballs (which we stream-extract and delete).
-          # Bump the suffix when changing the filename format produced by
-          # fetch_semlex.py so old caches with stale filenames don't restore.
+          # Bump the `fmtv*` suffix when changing the filename format produced
+          # by fetch_semlex.py so old caches with stale filenames don't restore.
           path: ml/data/incoming
-          key: semlex-fmtv2-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_splits }}-${{ inputs.semlex_clips_per_sign }}
+          key: semlex-fmtv2-${{ hashFiles('content/wave1_signs.csv') }}-${{ env.SEMLEX_SPLITS_SAFE }}-${{ inputs.semlex_clips_per_sign }}
 
       - name: Subset Sem-Lex SEMLEX_DRIVE_FILES to the requested splits
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
