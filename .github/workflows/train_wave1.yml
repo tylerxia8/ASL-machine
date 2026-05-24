@@ -24,6 +24,11 @@ name: Train Wave 1
 #     gated by the `semlex_splits` workflow input.
 #     Add at: repo Settings → Secrets and variables → Actions → New secret.
 
+env:
+  # Opt actions/checkout, actions/setup-python, actions/cache, etc. into Node 24
+  # ahead of GitHub's 2026-06-02 forced flip. Removes the deprecation warning.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 on:
   workflow_dispatch:
     inputs:
