@@ -153,24 +153,70 @@ def _gdown_to(file_id: str, dest: Path) -> Path:
     return dest
 
 
+_FORM_ACTION_RE = re.compile(
+    r'<form\b[^>]*\bid="download-form"[^>]*\baction="([^"]+)"', re.IGNORECASE
+)
+_FORM_BLOCK_RE = re.compile(
+    r'<form\b[^>]*\bid="download-form"[^>]*>(.*?)</form>', re.IGNORECASE | re.DOTALL
+)
+# Captures any <input name="X" value="Y"> regardless of attribute order/quoting.
+_INPUT_RE = re.compile(
+    r'<input\b[^>]*?\bname="([^"]+)"[^>]*?\bvalue="([^"]*)"', re.IGNORECASE
+)
+_INPUT_RE_REVERSED = re.compile(
+    r'<input\b[^>]*?\bvalue="([^"]*)"[^>]*?\bname="([^"]+)"', re.IGNORECASE
+)
+
+
+def _parse_drive_confirm_form(html: str) -> tuple[str, dict[str, str]] | None:
+    """Extract (action_url, form_field_dict) from Drive's current download interstitial.
+
+    The current Drive UX renders a `<form id="download-form" action="...">` whose
+    action URL points at drive.usercontent.google.com (not drive.google.com).
+    Hidden inputs carry id/export/authuser/confirm/uuid. We just submit whatever
+    the form says — don't second-guess the field set.
+    """
+    action_match = _FORM_ACTION_RE.search(html)
+    block_match = _FORM_BLOCK_RE.search(html)
+    if not action_match or not block_match:
+        return None
+    action = action_match.group(1).replace("&amp;", "&")
+    fields: dict[str, str] = {}
+    for m in _INPUT_RE.finditer(block_match.group(1)):
+        fields[m.group(1)] = m.group(2)
+    for m in _INPUT_RE_REVERSED.finditer(block_match.group(1)):
+        fields.setdefault(m.group(2), m.group(1))
+    return action, fields
+
+
 def open_drive_download_stream(file_id: str):
     """Return a streaming requests.Response for a Google Drive file.
 
-    Handles Drive's "virus scan can't run" interstitial for files > ~100 MB by
-    either pulling the `download_warning_*` cookie (legacy UX) or parsing the
-    confirm/uuid params from the HTML form (current UX). The returned response
-    is configured so `resp.raw.read(n)` yields raw tarball bytes (no HTTP-level
-    decoding), suitable for `tarfile.open(fileobj=resp.raw, mode="r|gz")`.
+    Handles Drive's "virus scan can't run" interstitial for files > ~100 MB via:
+      1. Legacy `download_warning_*` cookie (older UX)
+      2. The HTML form's own action URL + hidden inputs (current UX) — critical:
+         the action URL is drive.usercontent.google.com, NOT drive.google.com/uc.
+    Raises RuntimeError with a body preview if neither path yields binary data.
     """
     import requests
     session = requests.Session()
     base = "https://drive.google.com/uc"
     params = {"export": "download", "id": file_id}
     resp = session.get(base, params=params, stream=True, allow_redirects=True)
-    ctype = resp.headers.get("Content-Type", "").lower()
 
-    if "text/html" in ctype:
-        # Legacy: a download_warning_* cookie carries the confirm token.
+    def _looks_like_binary(r) -> bool:
+        ctype = r.headers.get("Content-Type", "").lower()
+        clen_str = r.headers.get("Content-Length", "")
+        try:
+            clen = int(clen_str) if clen_str else 0
+        except ValueError:
+            clen = 0
+        # Drive's HTML interstitial is text/html and small (a few KB).
+        # Real tarball is application/octet-stream or similar, ≫1 MB.
+        return ("text/html" not in ctype) and (clen > 1_000_000 or clen == 0 and "octet" in ctype)
+
+    if not _looks_like_binary(resp):
+        # Try cookie-based confirm (legacy)
         token = next(
             (v for k, v in session.cookies.items() if k.startswith("download_warning")),
             None,
@@ -179,27 +225,61 @@ def open_drive_download_stream(file_id: str):
             params["confirm"] = token
             resp.close()
             resp = session.get(base, params=params, stream=True, allow_redirects=True)
-        else:
-            # Current: parse the confirm + uuid out of the HTML form.
+
+        if not _looks_like_binary(resp):
+            # Parse the new-UX form and resubmit to its action URL.
             html = resp.text
-            uuid_match = re.search(r'name="uuid"\s+value="([^"]+)"', html)
-            id_match = re.search(r'name="id"\s+value="([^"]+)"', html)
-            params2 = {
-                "export": "download",
-                "id": id_match.group(1) if id_match else file_id,
-                "confirm": "t",
-            }
-            if uuid_match:
-                params2["uuid"] = uuid_match.group(1)
+            parsed = _parse_drive_confirm_form(html)
+            if parsed is None:
+                preview = html[:600].replace("\n", " ")
+                raise RuntimeError(
+                    f"Drive did not return a download form for {file_id}. "
+                    f"Content-Type={resp.headers.get('Content-Type')!r} "
+                    f"Content-Length={resp.headers.get('Content-Length')!r}. "
+                    f"Body preview: {preview!r}"
+                )
+            action_url, fields = parsed
+            print(f"  Drive interstitial: posting to {action_url} with fields={sorted(fields.keys())}")
             resp.close()
-            resp = session.get(base, params=params2, stream=True, allow_redirects=True)
+            resp = session.get(action_url, params=fields, stream=True, allow_redirects=True)
 
     resp.raise_for_status()
-    # We want the raw .tar.gz bytes; tarfile will gunzip them. If urllib3
-    # were to auto-decompress (Content-Encoding: gzip) we'd get double-decode
-    # garbage — explicitly disable.
+    # Disable HTTP-level auto-decompression. Drive shouldn't send
+    # Content-Encoding: gzip for a .tar.gz file, but if it ever does
+    # we want the raw bytes so tarfile's own gunzip works correctly.
     resp.raw.decode_content = False
     return resp
+
+
+class _ChunkedFile:
+    """Wraps `iter_content` chunks into a `read(n)`-style file for tarfile.
+
+    Using iter_content avoids subtle issues with urllib3's HTTPResponse buffering
+    and lets us cleanly prepend a peeked chunk back to the stream when we need
+    to inspect the magic bytes before handing the stream off.
+    """
+
+    def __init__(self, response, chunk_size: int = 1024 * 1024, prefix: bytes = b""):
+        self._it = response.iter_content(chunk_size=chunk_size, decode_unicode=False)
+        self._buffer = prefix
+
+    def read(self, n: int = -1) -> bytes:
+        if n < 0:
+            chunks = [self._buffer]
+            self._buffer = b""
+            for c in self._it:
+                if c:
+                    chunks.append(c)
+            return b"".join(chunks)
+        while len(self._buffer) < n:
+            try:
+                nxt = next(self._it)
+            except StopIteration:
+                break
+            if nxt:
+                self._buffer += nxt
+        out, self._buffer = self._buffer[:n], self._buffer[n:]
+        return out
 
 
 def load_metadata(csv_path: Path, wave1: list[str], override: dict[str, list[str]]
@@ -366,9 +446,37 @@ def stream_extract_from_drive(
     resp = open_drive_download_stream(file_id)
     total_bytes = resp.headers.get("Content-Length")
     if total_bytes:
-        print(f"  Source size: {int(total_bytes) / 1e9:.1f} GB (streamed, not stored)")
+        try:
+            n = int(total_bytes)
+            print(f"  Source size: {n / 1e9:.2f} GB (streamed, not stored)")
+        except ValueError:
+            print(f"  Source size: {total_bytes!r} (streamed, not stored)")
+    else:
+        print("  Source size: (Content-Length not provided; streaming anyway)")
     try:
-        with tarfile.open(fileobj=resp.raw, mode="r|gz") as tar:
+        # Peek the gzip magic bytes BEFORE opening tarfile so we can fail with
+        # a clear error if Drive handed us HTML instead of a tarball.
+        first_chunk_iter = resp.iter_content(chunk_size=1024 * 1024, decode_unicode=False)
+        first = b""
+        for c in first_chunk_iter:
+            if c:
+                first = c
+                break
+        if first[:2] != b"\x1f\x8b":
+            preview = first[:300]
+            try:
+                preview_str = preview.decode("utf-8", errors="replace")
+            except Exception:
+                preview_str = repr(preview)
+            raise RuntimeError(
+                f"Response for {role_label} is not a gzip stream. "
+                f"Content-Type={resp.headers.get('Content-Type')!r} "
+                f"first {len(first)} bytes hex={first[:16].hex()!r}. "
+                f"Body preview: {preview_str!r}"
+            )
+        # Reconstruct the stream with the peeked chunk prepended.
+        stream = _ChunkedFile(resp, chunk_size=1024 * 1024, prefix=first)
+        with tarfile.open(fileobj=stream, mode="r|gz") as tar:
             return _extract_from_tar_stream(
                 tar, role_label, wanted, cap_per_sign, out_dir, existing_counts
             )
