@@ -5,8 +5,10 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from auth import get_user_id
@@ -51,6 +53,36 @@ def ensure_profile(db: Session, user_id: str):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# release-assets.githubusercontent.com doesn't send Access-Control-Allow-Origin,
+# so a browser at localhost:5174 can't directly fetch a GitHub Release model
+# file. This proxy streams the file through the API (which DOES have CORS
+# configured) so the model-source selector can swap between trained models
+# without re-syncing files locally.
+_MODEL_PROXY_ALLOWED = {"model.onnx", "labels.json", "model_meta.json"}
+_MODEL_PROXY_REPO = "tylerxia8/ASL-machine"
+
+
+@app.get("/model_proxy/{tag}/{filename}")
+async def model_proxy(tag: str, filename: str):
+    if filename not in _MODEL_PROXY_ALLOWED:
+        raise HTTPException(404, f"Only {sorted(_MODEL_PROXY_ALLOWED)} are proxiable")
+    # Defensive: tag traversal protection. Tags are alphanumeric+dash+dot+underscore.
+    if any(c in tag for c in "/\\?#"):
+        raise HTTPException(400, "Invalid tag")
+    upstream = f"https://github.com/{_MODEL_PROXY_REPO}/releases/download/{tag}/{filename}"
+
+    async def _stream():
+        async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60.0)) as client:
+            async with client.stream("GET", upstream) as r:
+                if r.status_code != 200:
+                    raise HTTPException(r.status_code, f"Upstream returned {r.status_code} for {upstream}")
+                async for chunk in r.aiter_bytes(chunk_size=1024 * 1024):
+                    yield chunk
+
+    media = "application/octet-stream" if filename.endswith(".onnx") else "application/json"
+    return StreamingResponse(_stream(), media_type=media)
 
 
 def _read_sign_rows(path: Path) -> list[dict]:

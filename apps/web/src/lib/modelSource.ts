@@ -9,6 +9,7 @@
 
 const STORAGE_KEY = "asl_model_source";
 const RELEASES_API = "https://api.github.com/repos/tylerxia8/ASL-machine/releases?per_page=20";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export type ModelSource = {
   id: string;
@@ -26,17 +27,20 @@ export const BUNDLED_SOURCE: ModelSource = {
   metaUrl: "/models/model_meta.json",
 };
 
-function releaseToSource(tag: string, assets: { name: string; browser_download_url: string }[]): ModelSource | null {
-  const m = assets.find((a) => a.name === "model.onnx");
-  const l = assets.find((a) => a.name === "labels.json");
-  const meta = assets.find((a) => a.name === "model_meta.json");
-  if (!m || !l) return null;
+// release-assets.githubusercontent.com doesn't send CORS headers, so the
+// browser can't fetch model files directly from the GitHub Release URL.
+// Route through the API's /model_proxy/{tag}/{file} endpoint instead, which
+// streams the file with our own CORS-allowed origin.
+function releaseToSource(tag: string, assets: { name: string }[]): ModelSource | null {
+  const names = new Set(assets.map((a) => a.name));
+  if (!names.has("model.onnx") || !names.has("labels.json")) return null;
+  const proxy = (file: string) => `${API_URL}/model_proxy/${encodeURIComponent(tag)}/${file}`;
   return {
     id: `release:${tag}`,
     label: `Release: ${tag}`,
-    modelUrl: m.browser_download_url,
-    labelsUrl: l.browser_download_url,
-    metaUrl: meta?.browser_download_url ?? "/models/model_meta.json",
+    modelUrl: proxy("model.onnx"),
+    labelsUrl: proxy("labels.json"),
+    metaUrl: names.has("model_meta.json") ? proxy("model_meta.json") : "/models/model_meta.json",
   };
 }
 
