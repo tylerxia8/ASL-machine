@@ -89,8 +89,10 @@ jobs:
         with:
           # Cache the already-extracted per-sign videos (small: ~1–2 GB),
           # not the multi-GB raw tarballs (which we stream-extract and delete).
+          # Bump the suffix when changing the filename format produced by
+          # fetch_semlex.py so old caches with stale filenames don't restore.
           path: ml/data/incoming
-          key: semlex-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_splits }}-${{ inputs.semlex_clips_per_sign }}
+          key: semlex-fmtv2-${{ hashFiles('content/wave1_signs.csv') }}-${{ inputs.semlex_splits }}-${{ inputs.semlex_clips_per_sign }}
 
       - name: Subset Sem-Lex SEMLEX_DRIVE_FILES to the requested splits
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'

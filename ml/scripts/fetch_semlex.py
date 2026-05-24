@@ -196,7 +196,11 @@ def load_metadata(csv_path: Path, wave1: list[str], override: dict[str, list[str
             # value here; stream_extract probes both basename AND stem.
             key = Path(fname).name
             signer_raw = (row.get(signer_col) or "unknown").strip() if signer_col else "unknown"
-            signer_id = f"semlex_{re.sub(r'[^A-Za-z0-9]+', '_', signer_raw).lower()}".strip("_") or "semlex_unknown"
+            # Must match import_captures.py's regex ^(.+)_(signer_[a-z0-9]+)_\d+$.
+            # The signer token has to be `signer_` + alphanumerics ONLY (no extra
+            # underscores), so strip-not-replace non-alnum characters.
+            signer_clean = re.sub(r"[^A-Za-z0-9]+", "", signer_raw).lower() or "unknown"
+            signer_id = f"signer_semlex{signer_clean}"
             split = (row.get(split_col) or "unknown").strip() if split_col else "unknown"
             matches[key] = (matched, signer_id, split)
             per_sign_count[matched] = per_sign_count.get(matched, 0) + 1
@@ -255,7 +259,10 @@ def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
                 continue
             ext = mem_path.suffix.lower() or ".mp4"
             counts[sign_id] = counts.get(sign_id, 0) + 1
-            target = out_dir / f"{sign_id}_{signer_id}_semlex_{counts[sign_id]:04d}{ext}"
+            # Filename must match import_captures.py's regex:
+            #   ^(.+)_(signer_[a-z0-9]+)_\d+$
+            # signer_id already includes the "signer_" prefix from load_metadata.
+            target = out_dir / f"{sign_id}_{signer_id}_{counts[sign_id]:04d}{ext}"
             with tar.extractfile(member) as src, open(target, "wb") as dst:
                 if src is None:
                     continue
