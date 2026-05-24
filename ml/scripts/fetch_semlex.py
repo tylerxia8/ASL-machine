@@ -553,15 +553,28 @@ def main() -> int:
 
     total_extracted = 0
     global_counts: dict[str, int] = {}
+    split_failures: list[tuple[str, str]] = []
     for role in ("train", "val", "test"):
         if role not in drive_files:
             print(f"Skipping {role} (not in SEMLEX_DRIVE_FILES).")
             continue
-        n = stream_extract_from_drive(
-            drive_files[role], role, wanted, args.clips_per_sign,
-            out_dir, existing_counts=global_counts,
-        )
-        total_extracted += n
+        try:
+            n = stream_extract_from_drive(
+                drive_files[role], role, wanted, args.clips_per_sign,
+                out_dir, existing_counts=global_counts,
+            )
+            total_extracted += n
+        except RuntimeError as e:
+            msg = str(e)
+            # Drive's quota-exhausted page mentions "Quota exceeded" verbatim.
+            # We log but don't abort — the other splits often have independent
+            # per-file quotas and can succeed in the same run.
+            is_quota = "quota exceeded" in msg.lower() or "quota" in msg.lower()
+            tag = "QUOTA" if is_quota else "ERROR"
+            print(f"\n⚠ {tag} on Sem-Lex {role}: {msg[:400]}", file=sys.stderr)
+            print(f"  Continuing with remaining splits. The {role} tarball can be "
+                  f"retried after ~24h (Drive quota window).", file=sys.stderr)
+            split_failures.append((role, "quota" if is_quota else "other"))
 
     print(f"\nTotal extracted: {total_extracted} videos → {out_dir}")
     print("Per-sign extracted count (after per-sign cap):")

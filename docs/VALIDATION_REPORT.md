@@ -67,6 +67,12 @@ Counted from `semlex_metadata.csv` filtered to our Wave 1 sign roster:
 
 Per-sign cap (`semlex_clips_per_sign` workflow input, default 50) trims the high-count classes to keep the dataset balanced. The above counts are *available*, not necessarily *trained-on*.
 
+### Known infrastructure limitation: Sem-Lex Drive quota
+
+Sem-Lex distributes the three video tarballs (`train.tar.gz` 23.7 GB, `val.tar.gz`, `test.tar.gz`) via Google Drive. Public Drive files have a per-file daily download quota; repeated dispatches of the training workflow (especially partial downloads) can exhaust it, locking the file for ~24 hours. When this happens the fetcher logs a `⚠ QUOTA on Sem-Lex {role}` warning and continues with remaining splits instead of aborting the whole run — but the trained-on dataset shrinks accordingly.
+
+A more reliable distribution channel (Hugging Face Hub, S3 with a signed mirror, etc.) would remove this risk. For the controlled pilot we accept the quota constraint and re-train when it resets.
+
 ## Threshold policy
 
 The browser inference layer uses three confidence bands ([`apps/web/src/lib/threshold.ts`](../apps/web/src/lib/threshold.ts)):
