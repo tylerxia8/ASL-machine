@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
 import torch
 import torch.nn as nn
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from tqdm import tqdm
 
 from dataset import SignClipDataset
@@ -32,6 +33,11 @@ def main():
                              "Set to 0 to disable.")
     parser.add_argument("--weight-decay", type=float, default=1e-4,
                         help="Adam weight decay — helps fight mode collapse.")
+    parser.add_argument("--balanced-sampling", action="store_true", default=True,
+                        help="Use WeightedRandomSampler so every batch has roughly uniform class "
+                             "representation. Defends against mode collapse when class counts "
+                             "are unequal (some Wave 1 signs cap at 100, others at 1).")
+    parser.add_argument("--no-balanced-sampling", dest="balanced_sampling", action="store_false")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -42,7 +48,38 @@ def main():
 
     train_ds = SignClipDataset(manifest_path, "train", label_to_idx)
     val_ds = SignClipDataset(manifest_path, "val", label_to_idx)
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
+
+    # Class-balanced sampling: when class counts are unequal (Sem-Lex coverage
+    # ranges from 1 to ~600 per sign in the wave1 roster), uniform per-clip
+    # sampling produces batches dominated by the over-represented classes,
+    # which has historically driven mode collapse in v5/v6/v7. Computing
+    # per-sample weights = 1/N_class makes every class equally likely to
+    # appear in each batch, regardless of total class count.
+    if args.balanced_sampling:
+        train_labels = [label_to_idx[row["sign_id"]] for row in train_ds.items]
+        class_counts = Counter(train_labels)
+        n_classes = len(sign_ids)
+        # Show the imbalance before training so it's clear in CI logs.
+        cnts = [class_counts.get(i, 0) for i in range(n_classes)]
+        print(f"Train class counts: min={min(cnts)} max={max(cnts)} "
+              f"mean={sum(cnts)/max(n_classes,1):.1f} zeros={sum(1 for c in cnts if c == 0)}")
+        # Per-sample weights — inverse class frequency. Zero-count classes get
+        # weight 0 (they have no samples anyway; the sampler never picks them).
+        sample_weights = [1.0 / max(class_counts[lbl], 1) for lbl in train_labels]
+        # num_samples = len(train_ds) keeps each "epoch" roughly the same length
+        # as before, but with class-balanced composition rather than count-weighted.
+        sampler = WeightedRandomSampler(
+            weights=sample_weights, num_samples=len(train_ds), replacement=True
+        )
+        train_loader = DataLoader(
+            train_ds, batch_size=args.batch_size, sampler=sampler, num_workers=0
+        )
+        print(f"Using WeightedRandomSampler (class-balanced batches)")
+    else:
+        train_loader = DataLoader(
+            train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0
+        )
+        print("Using uniform per-clip shuffle (no class balancing)")
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     print(f"Dataset: {len(train_ds)} train, {len(val_ds)} val, {len(sign_ids)} classes")
