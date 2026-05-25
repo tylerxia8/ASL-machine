@@ -11,6 +11,13 @@ const INCOMING_REL = "ml\\data\\incoming";
 
 type Phase = "idle" | "countdown" | "recording" | "saving";
 
+const PHASE_LABELS: Record<Phase, string> = {
+  idle: `Record ${RECORD_MS / 1000}s clip`,
+  countdown: "Get ready…",
+  recording: "RECORDING",
+  saving: "Saving…",
+};
+
 const CAMERA_HELP: Record<string, string> = {
   denied: "Camera access was denied. Enable camera permission in browser settings and reload.",
   unsupported: "This browser does not support camera access. Use Chrome or Edge on desktop.",
@@ -30,7 +37,7 @@ export default function CapturePage() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [countdown, setCountdown] = useState(3);
   const lastDownloadUrlRef = useRef<string | null>(null);
-  const [lastFilename, setLastFilename] = useState<string | null>(null);
+  const [lastClip, setLastClip] = useState<{ filename: string; url: string; sizeKB: number } | null>(null);
   const [reference, setReference] = useState<HintResponse | null>(null);
 
   const current = signs[index];
@@ -60,7 +67,14 @@ export default function CapturePage() {
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play();
+          // play() can reject under autoplay policies; surface it instead of
+          // letting it disappear into an unhandled-promise-rejection.
+          videoRef.current.play().catch((err) => {
+            setCameraError(
+              `Browser blocked autoplay: ${err?.name ?? "unknown"}. ` +
+                "Click anywhere on the page, then refresh."
+            );
+          });
         }
       })
       .catch((e) => {
@@ -70,6 +84,7 @@ export default function CapturePage() {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      if (lastDownloadUrlRef.current) URL.revokeObjectURL(lastDownloadUrlRef.current);
     };
   }, []);
 
@@ -106,13 +121,13 @@ export default function CapturePage() {
     a.href = url;
     a.download = filename;
     a.click();
-    setLastFilename(filename);
+    setLastClip({ filename, url, sizeKB: blob.size / 1024 });
 
     const nextCount = (counts[current.sign_id] ?? 0) + 1;
     const updated = { ...counts, [current.sign_id]: nextCount };
     setCounts(updated);
     localStorage.setItem(`capture_counts_${signerId}`, JSON.stringify(updated));
-    setStatus(`Saved ${filename} (${(blob.size / 1024).toFixed(0)} KB) to Downloads.`);
+    setStatus(`Saved ${filename} (${(blob.size / 1024).toFixed(0)} KB) to Downloads. Review below.`);
     setPhase("idle");
 
     if (nextCount >= TARGET_PER_SIGN && index < signs.length - 1) {
@@ -127,13 +142,14 @@ export default function CapturePage() {
     const updated = { ...counts, [current.sign_id]: c - 1 };
     setCounts(updated);
     localStorage.setItem(`capture_counts_${signerId}`, JSON.stringify(updated));
+    const filename = lastClip?.filename;
     setStatus(
       `Decremented count for ${current.gloss}. ` +
-        (lastFilename
-          ? `Delete ${lastFilename} from your Downloads folder if you want to discard it.`
-          : "Note: the file is still in Downloads; delete it manually if you want to discard.")
+        (filename
+          ? `Delete ${filename} from your Downloads folder if you want to discard it.`
+          : "The file is still in Downloads; delete it manually if you want to discard.")
     );
-    setLastFilename(null);
+    setLastClip(null);
   };
 
   const recording = phase === "recording";
@@ -166,11 +182,27 @@ export default function CapturePage() {
       <p style={{ color: "var(--muted)" }}>
         Target: {TARGET_PER_SIGN}/sign · minimum {MIN_PER_SIGN}/sign to retrain · {RECORD_MS / 1000}s per clip.
       </p>
-      <p>
-        {signerId}: <strong>{progress.totalClips}</strong> clips · {" "}
-        <strong>{progress.minDone}</strong>/{progress.total} at {MIN_PER_SIGN}+ · {" "}
-        <strong>{progress.done}</strong>/{progress.total} at {TARGET_PER_SIGN}+
-      </p>
+
+      <div className="card" style={{ marginBottom: "1rem", display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+        <label htmlFor="signer-select"><strong>Signer ID:</strong></label>
+        <select
+          id="signer-select"
+          className="input"
+          style={{ width: "12rem", marginBottom: 0 }}
+          value={signerId}
+          onChange={(e) => setSignerId(e.target.value)}
+          disabled={busy}
+        >
+          <option value="signer_a">signer_a</option>
+          <option value="signer_b">signer_b</option>
+          <option value="signer_c">signer_c</option>
+        </select>
+        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+          <strong>{progress.totalClips}</strong> clips · {" "}
+          <strong>{progress.minDone}</strong>/{progress.total} at {MIN_PER_SIGN}+ · {" "}
+          <strong>{progress.done}</strong>/{progress.total} at {TARGET_PER_SIGN}+
+        </span>
+      </div>
 
       {cameraError ? (
         <div className="card status-fail">
@@ -250,20 +282,9 @@ export default function CapturePage() {
             </p>
           </div>
         )}
-        <label style={{ display: "block", marginTop: "0.5rem" }}>Signer ID</label>
-        <select
-          className="input"
-          value={signerId}
-          onChange={(e) => setSignerId(e.target.value)}
-          disabled={busy}
-        >
-          <option value="signer_a">signer_a</option>
-          <option value="signer_b">signer_b</option>
-          <option value="signer_c">signer_c</option>
-        </select>
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
           <button className="btn" onClick={startRecord} disabled={busy || !!cameraError}>
-            {busy ? phase : `Record ${RECORD_MS / 1000}s clip`}
+            {PHASE_LABELS[phase]}
           </button>
           <button className="btn btn-secondary" onClick={undoLast} disabled={busy || (counts[current.sign_id] ?? 0) === 0}>
             Undo last
@@ -281,6 +302,27 @@ export default function CapturePage() {
         </div>
         {status && <p style={{ marginTop: "0.75rem", color: "var(--muted)", fontSize: "0.9rem" }}>{status}</p>}
       </div>
+
+      {/* Clip review: shown after a successful save. Lets the signer verify
+          the take before committing to the next one. */}
+      {lastClip && !busy && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <strong>Last clip review</strong>
+          <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: "0.25rem 0" }}>
+            {lastClip.filename} · {lastClip.sizeKB.toFixed(0)} KB
+          </p>
+          <video
+            src={lastClip.url}
+            controls
+            playsInline
+            style={{ width: "100%", maxWidth: "320px", borderRadius: "8px", background: "#000" }}
+          />
+          <p style={{ marginTop: "0.5rem", fontSize: "0.85rem", color: "var(--muted)" }}>
+            Looks good? Hit <strong>Record</strong> again. Bad take? <strong>Undo last</strong> decrements the count;
+            delete the file from your Downloads folder.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
