@@ -28,9 +28,13 @@ WIDTH = 160
 # - Aggressive random crops (>10%): risks cutting the hands out of frame.
 AUG_DEFAULTS = {
     "temporal_jitter": 2,        # ± frames when subsampling to NUM_FRAMES
-    "brightness_jitter": 0.15,   # ± multiplicative factor on RGB
-    "contrast_jitter": 0.15,     # ± multiplicative around the mean
-    "spatial_crop_max": 0.08,    # max fraction trimmed off each side, then resized
+    "brightness_jitter": 0.10,   # ± multiplicative factor on RGB
+    "contrast_jitter": 0.10,     # ± multiplicative around the mean
+    "spatial_crop_max": 0.04,    # max fraction trimmed off each side, then resized
+    # NB: was 0.08 in v5/v6; halved because aggressive spatial crops shift the
+    # hand centroid enough that the model can't pick up location-sensitive
+    # signs (where vs what, please vs sorry). Combined with the v5/v6
+    # mode-collapse evidence we err on the side of less aug.
 }
 
 

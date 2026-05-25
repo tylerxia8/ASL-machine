@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -23,6 +24,14 @@ def main():
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--model-version", default="v1")
+    parser.add_argument("--model-size", choices=["default", "small"], default="default",
+                        help="'small' (~720K params) for low-data regimes (<2k clips); "
+                             "'default' (~3.57M params) otherwise.")
+    parser.add_argument("--early-stop-patience", type=int, default=4,
+                        help="Stop early if val_acc doesn't improve for this many epochs. "
+                             "Set to 0 to disable.")
+    parser.add_argument("--weight-decay", type=float, default=1e-4,
+                        help="Adam weight decay — helps fight mode collapse.")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -36,19 +45,30 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
+    print(f"Dataset: {len(train_ds)} train, {len(val_ds)} val, {len(sign_ids)} classes")
+    print(f"Model: {args.model_size} (build_model size='{args.model_size}')")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = build_model(num_classes=len(sign_ids)).to(device)
-    opt = torch.optim.Adam(model.parameters(), lr=args.lr)
+    model = build_model(num_classes=len(sign_ids), size=args.model_size).to(device)
+    n_params = sum(p.numel() for p in model.parameters())
+    print(f"Params: {n_params/1e6:.2f}M  ({n_params:,})")
+
+    opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # Cosine annealing decays LR from args.lr down to 0 over args.epochs.
+    # Smooth decay helps avoid the late-epoch mode collapse observed in v5/v6.
+    scheduler = CosineAnnealingLR(opt, T_max=args.epochs)
     criterion = nn.CrossEntropyLoss()
 
     ckpt_dir = ML_ROOT / "checkpoints" / args.model_version
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     best_acc = 0.0
+    epochs_since_improvement = 0
+    val_acc_history: list[float] = []
 
     for epoch in range(args.epochs):
         model.train()
         total_loss = 0.0
-        for x, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs}"):
+        for x, y in tqdm(train_loader, desc=f"Epoch {epoch+1}/{args.epochs} lr={opt.param_groups[0]['lr']:.2e}"):
             x, y = x.to(device), y.to(device)
             opt.zero_grad()
             logits = model(x)
@@ -56,35 +76,61 @@ def main():
             loss.backward()
             opt.step()
             total_loss += loss.item()
+        scheduler.step()
 
+        # Val accuracy + class-diversity probe: count distinct classes predicted.
+        # A model in mode collapse predicts only 1-2 classes, even on a diverse val set.
         model.eval()
         correct = total = 0
+        pred_class_counts: dict[int, int] = {}
         with torch.no_grad():
             for x, y in val_loader:
                 x, y = x.to(device), y.to(device)
                 pred = model(x).argmax(1)
                 correct += (pred == y).sum().item()
                 total += y.size(0)
+                for p in pred.tolist():
+                    pred_class_counts[p] = pred_class_counts.get(p, 0) + 1
         acc = correct / max(total, 1)
-        print(f"Epoch {epoch+1} loss={total_loss/len(train_loader):.4f} val_acc={acc:.4f}")
+        n_distinct_preds = len(pred_class_counts)
+        val_acc_history.append(acc)
+        avg_loss = total_loss / max(len(train_loader), 1)
+        collapse_flag = " ⚠ MODE-COLLAPSE" if n_distinct_preds <= 3 and total >= 10 else ""
+        print(f"Epoch {epoch+1}: loss={avg_loss:.4f} val_acc={acc:.4f} "
+              f"distinct_preds={n_distinct_preds}/{len(sign_ids)}{collapse_flag}")
+
         if acc >= best_acc:
             best_acc = acc
+            epochs_since_improvement = 0
             torch.save(
                 {
                     "model_state": model.state_dict(),
                     "label_to_idx": label_to_idx,
                     "sign_ids": sign_ids,
                     "model_version": args.model_version,
+                    "model_size": args.model_size,
                     "val_accuracy": acc,
+                    "val_distinct_preds": n_distinct_preds,
+                    "val_acc_history": val_acc_history,
                 },
                 ckpt_dir / "best.pt",
             )
+        else:
+            epochs_since_improvement += 1
+            if args.early_stop_patience > 0 and epochs_since_improvement >= args.early_stop_patience:
+                print(f"Early stopping at epoch {epoch+1}: "
+                      f"val_acc hasn't improved for {epochs_since_improvement} epochs "
+                      f"(best={best_acc:.4f}).")
+                break
 
     meta = {
         "model_version": args.model_version,
+        "model_size": args.model_size,
         "num_classes": len(sign_ids),
         "sign_ids": sign_ids,
         "val_accuracy": best_acc,
+        "val_acc_history": val_acc_history,
+        "params": n_params,
         "pretrained": False,
     }
     exports = ML_ROOT / "exports"

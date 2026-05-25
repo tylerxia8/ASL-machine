@@ -100,7 +100,8 @@ def main():
     sign_ids = ckpt["sign_ids"]
     label_to_idx = ckpt["label_to_idx"]
 
-    model = build_model(num_classes=len(sign_ids))
+    size = ckpt.get("model_size", "default")
+    model = build_model(num_classes=len(sign_ids), size=size)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 

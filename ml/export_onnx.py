@@ -29,7 +29,9 @@ def main():
 
     ckpt = torch.load(args.checkpoint, map_location="cpu", weights_only=False)
     sign_ids = ckpt["sign_ids"]
-    model = build_model(num_classes=len(sign_ids))
+    # Older checkpoints (pre-v7) don't record model_size — default to "default".
+    size = ckpt.get("model_size", "default")
+    model = build_model(num_classes=len(sign_ids), size=size)
     model.load_state_dict(ckpt["model_state"])
     model.eval()
 

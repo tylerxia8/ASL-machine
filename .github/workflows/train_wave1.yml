@@ -58,6 +58,13 @@ on:
         description: "Training epochs"
         type: number
         default: 20
+      model_size:
+        description: "Model capacity. 'small' (~720K params) for <2k clips; 'default' (~3.57M) otherwise"
+        type: choice
+        options:
+          - small
+          - default
+        default: small
       model_version:
         description: "Model version tag (also used for release tag)"
         type: string
@@ -202,7 +209,8 @@ jobs:
           python ml/train.py \
             --manifest ml/data/manifest.json \
             --epochs ${{ inputs.epochs }} \
-            --model-version ${{ inputs.model_version }}
+            --model-version ${{ inputs.model_version }} \
+            --model-size ${{ inputs.model_size }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
         env:
