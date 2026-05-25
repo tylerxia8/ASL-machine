@@ -484,14 +484,70 @@ def stream_extract_from_drive(
         resp.close()
 
 
+def stream_extract_from_url(
+    url: str,
+    role_label: str,
+    wanted: dict[str, tuple[str, str, str]],
+    cap_per_sign: int,
+    out_dir: Path,
+    existing_counts: dict[str, int] | None = None,
+) -> int:
+    """Stream-extract a tar.gz from a direct HTTPS URL (no Drive interstitial).
+
+    Use for Hugging Face Hub or any other CDN-style host where the URL is a
+    permanent direct link to the tarball. Same streaming + magic-byte +
+    chunked-file pipeline as `stream_extract_from_drive()` minus the Drive
+    confirm-form dance.
+    """
+    import requests
+    print(f"\nStreaming {role_label}.tar.gz from {url[:80]}{'…' if len(url) > 80 else ''}")
+    resp = requests.get(url, stream=True, timeout=60, allow_redirects=True)
+    resp.raise_for_status()
+    resp.raw.decode_content = False
+    total_bytes = resp.headers.get("Content-Length")
+    if total_bytes:
+        try:
+            n = int(total_bytes)
+            print(f"  Source size: {n / 1e9:.2f} GB (streamed, not stored)")
+        except ValueError:
+            pass
+    try:
+        first_chunk_iter = resp.iter_content(chunk_size=1024 * 1024, decode_unicode=False)
+        first = b""
+        for c in first_chunk_iter:
+            if c:
+                first = c
+                break
+        if first[:2] != b"\x1f\x8b":
+            preview = first[:300]
+            try:
+                preview_str = preview.decode("utf-8", errors="replace")
+            except Exception:
+                preview_str = repr(preview)
+            raise RuntimeError(
+                f"Response for {role_label} from {url[:60]}… is not a gzip stream. "
+                f"Content-Type={resp.headers.get('Content-Type')!r} "
+                f"first {len(first)} bytes hex={first[:16].hex()!r}. "
+                f"Body preview: {preview_str!r}"
+            )
+        stream = _ChunkedFile(resp, chunk_size=1024 * 1024, prefix=first)
+        with tarfile.open(fileobj=stream, mode="r|gz") as tar:
+            return _extract_from_tar_stream(
+                tar, role_label, wanted, cap_per_sign, out_dir, existing_counts
+            )
+    finally:
+        resp.close()
+
+
 def stream_extract(tar_path: Path, wanted: dict[str, tuple[str, str, str]],
                    cap_per_sign: int, out_dir: Path,
                    existing_counts: dict[str, int] | None = None) -> int:
     """Stream-extract from an on-disk tar.gz (used for local testing only).
 
-    The production CI path uses `stream_extract_from_drive()` which never
-    writes the tarball to disk. This wrapper exists so a previously-downloaded
-    local tarball can still be re-processed without going over the wire.
+    The production CI path uses `stream_extract_from_drive()` or
+    `stream_extract_from_url()` which never write the tarball to disk. This
+    wrapper exists so a previously-downloaded local tarball can still be
+    re-processed without going over the wire.
     """
     print(f"\nStream-extracting on-disk {tar_path.name}...")
     with tarfile.open(tar_path, mode="r|gz") as tar:
@@ -505,31 +561,46 @@ def main() -> int:
     p.add_argument("--drive-files-json", default=os.environ.get("SEMLEX_DRIVE_FILES"),
                    help='JSON dict: {"metadata":"<id>","train":"<id>","val":"<id>","test":"<id>"}. '
                         'Only `metadata` is required; any of train/val/test are optional.')
+    p.add_argument("--data-urls-json", default=os.environ.get("SEMLEX_DATA_URLS"),
+                   help='JSON dict of direct HTTPS URLs (e.g. Hugging Face Hub). '
+                        'Same shape as --drive-files-json but full URLs instead of Drive IDs. '
+                        'Takes priority over --drive-files-json when both are set.')
     p.add_argument("--clips-per-sign", type=int,
                    default=int(os.environ.get("SEMLEX_CLIPS_PER_SIGN", "60")))
     p.add_argument("--gloss-map", default=os.environ.get("SEMLEX_GLOSS_MAP"))
     p.add_argument("--work-dir", default=str(SEMLEX_DIR),
-                   help="Where to stash downloaded tarballs (temporary; can be cached in CI).")
+                   help="Where to stash the metadata CSV (temporary).")
     p.add_argument("--out-dir", default=str(INCOMING_DIR),
                    help="Where extracted videos land for the import pipeline.")
     p.add_argument("--keep-tarballs", action="store_true",
-                   help="Keep downloaded .tar.gz files (default: delete after extraction to save disk).")
+                   help="No-op (tarballs are streamed, never on disk). Kept for back-compat.")
     args = p.parse_args()
 
-    if not args.drive_files_json:
-        print("ERROR: SEMLEX_DRIVE_FILES not set.", file=sys.stderr)
-        print("Expected JSON dict mapping role → Google Drive file ID:", file=sys.stderr)
+    # Determine source mode: URL mode (HF Hub etc.) wins if set.
+    sources: dict[str, str] = {}
+    mode: str = ""  # "url" or "drive"
+    if args.data_urls_json:
+        try:
+            sources = json.loads(args.data_urls_json)
+            mode = "url"
+        except json.JSONDecodeError as e:
+            print(f"ERROR: SEMLEX_DATA_URLS is not valid JSON: {e}", file=sys.stderr)
+            return 1
+    elif args.drive_files_json:
+        try:
+            sources = json.loads(args.drive_files_json)
+            mode = "drive"
+        except json.JSONDecodeError as e:
+            print(f"ERROR: SEMLEX_DRIVE_FILES is not valid JSON: {e}", file=sys.stderr)
+            return 1
+    else:
+        print("ERROR: neither SEMLEX_DATA_URLS nor SEMLEX_DRIVE_FILES is set.", file=sys.stderr)
+        print("Expected JSON dict mapping role → URL or Drive file ID:", file=sys.stderr)
         print('  {"metadata":"...","train":"...","val":"...","test":"..."}', file=sys.stderr)
         return 1
 
-    try:
-        drive_files: dict[str, str] = json.loads(args.drive_files_json)
-    except json.JSONDecodeError as e:
-        print(f"ERROR: SEMLEX_DRIVE_FILES is not valid JSON: {e}", file=sys.stderr)
-        return 1
-
-    if "metadata" not in drive_files:
-        print("ERROR: SEMLEX_DRIVE_FILES must include a 'metadata' key (semlex_metadata.csv).", file=sys.stderr)
+    if "metadata" not in sources:
+        print(f"ERROR: source JSON must include a 'metadata' key (mode={mode}).", file=sys.stderr)
         return 1
 
     work_dir = Path(args.work_dir)
@@ -542,11 +613,19 @@ def main() -> int:
         override.update(json.loads(Path(args.gloss_map).read_text(encoding="utf-8")))
 
     wave1 = load_wave1_signs()
-    print(f"Wave 1 trained signs: {len(wave1)}")
+    print(f"Wave 1 trained signs: {len(wave1)}  (source mode: {mode})")
 
-    # 1. Pull metadata, identify which video filenames we want.
-    metadata_csv = _gdown_to(drive_files["metadata"], work_dir / "semlex_metadata.csv")
-    wanted = load_metadata(metadata_csv, wave1, override)
+    # 1. Pull metadata. Always small (~13 MB), so we land it on disk via either gdown or urllib.
+    metadata_path = work_dir / "semlex_metadata.csv"
+    if mode == "drive":
+        metadata_path = _gdown_to(sources["metadata"], metadata_path)
+    else:
+        import urllib.request
+        print(f"Downloading metadata from {sources['metadata'][:80]}…")
+        urllib.request.urlretrieve(sources["metadata"], str(metadata_path))
+        print(f"  done: {metadata_path.stat().st_size / 1e6:.2f} MB")
+
+    wanted = load_metadata(metadata_path, wave1, override)
     if not wanted:
         print("FATAL: 0 videos matched the wave1 roster. Check GLOSS_MAP_DEFAULT and the CSV's column naming.", file=sys.stderr)
         return 2
@@ -555,14 +634,20 @@ def main() -> int:
     global_counts: dict[str, int] = {}
     split_failures: list[tuple[str, str]] = []
     for role in ("train", "val", "test"):
-        if role not in drive_files:
-            print(f"Skipping {role} (not in SEMLEX_DRIVE_FILES).")
+        if role not in sources:
+            print(f"Skipping {role} (not in source JSON).")
             continue
         try:
-            n = stream_extract_from_drive(
-                drive_files[role], role, wanted, args.clips_per_sign,
-                out_dir, existing_counts=global_counts,
-            )
+            if mode == "drive":
+                n = stream_extract_from_drive(
+                    sources[role], role, wanted, args.clips_per_sign,
+                    out_dir, existing_counts=global_counts,
+                )
+            else:
+                n = stream_extract_from_url(
+                    sources[role], role, wanted, args.clips_per_sign,
+                    out_dir, existing_counts=global_counts,
+                )
             total_extracted += n
         except RuntimeError as e:
             msg = str(e)
@@ -572,8 +657,7 @@ def main() -> int:
             is_quota = "quota exceeded" in msg.lower() or "quota" in msg.lower()
             tag = "QUOTA" if is_quota else "ERROR"
             print(f"\n⚠ {tag} on Sem-Lex {role}: {msg[:400]}", file=sys.stderr)
-            print(f"  Continuing with remaining splits. The {role} tarball can be "
-                  f"retried after ~24h (Drive quota window).", file=sys.stderr)
+            print(f"  Continuing with remaining splits.", file=sys.stderr)
             split_failures.append((role, "quota" if is_quota else "other"))
 
     print(f"\nTotal extracted: {total_extracted} videos → {out_dir}")

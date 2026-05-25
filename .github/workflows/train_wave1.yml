@@ -17,12 +17,18 @@ name: Train Wave 1
 #                    is smallest and fastest for a first end-to-end run. Use
 #                    "train,val,test" for the full dataset (much larger).
 #
-# Required secret for Sem-Lex paths:
+# Required secret for Sem-Lex paths — EITHER of:
+#   - SEMLEX_DATA_URLS  (preferred): JSON dict of direct HTTPS URLs, e.g. to a
+#     Hugging Face Hub dataset mirror. No quota. See scripts/mirror_drive_to_hf.py
+#     for a one-time mirror helper and docs/MIRRORING_SEMLEX.md for the walkthrough.
 #   - SEMLEX_DRIVE_FILES: JSON dict of Google Drive file IDs from Sem-Lex.
-#     {"metadata":"<id>","train":"<id>","val":"<id>","test":"<id>"}
-#     `metadata` is required; train/val/test are optional and download is
-#     gated by the `semlex_splits` workflow input.
-#     Add at: repo Settings → Secrets and variables → Actions → New secret.
+#     Subject to Drive's per-file daily download quota; OK for the first run
+#     but flaky for iteration.
+# Both have the same shape: {"metadata":"<id-or-url>","train":...,"val":...,"test":...}
+# `metadata` is required; train/val/test are optional and download is
+# gated by the `semlex_splits` workflow input.
+# Add at: repo Settings → Secrets and variables → Actions → New secret.
+# SEMLEX_DATA_URLS wins if both are set.
 
 env:
   # Opt actions/checkout, actions/setup-python, actions/cache, etc. into Node 24
@@ -105,41 +111,59 @@ jobs:
           path: ml/data/incoming
           key: semlex-fmtv2-${{ hashFiles('content/wave1_signs.csv') }}-${{ env.SEMLEX_SPLITS_SAFE }}-${{ inputs.semlex_clips_per_sign }}
 
-      - name: Subset Sem-Lex SEMLEX_DRIVE_FILES to the requested splits
+      - name: Subset Sem-Lex source JSON to the requested splits
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
         id: subset_drive
         env:
+          SEMLEX_DATA_URLS: ${{ secrets.SEMLEX_DATA_URLS }}
           SEMLEX_DRIVE_FILES: ${{ secrets.SEMLEX_DRIVE_FILES }}
           SPLITS: ${{ inputs.semlex_splits }}
         run: |
-          if [ -z "$SEMLEX_DRIVE_FILES" ]; then
-            echo "ERROR: SEMLEX_DRIVE_FILES secret not set." >&2
-            echo "Add it under repo Settings → Secrets and variables → Actions." >&2
-            echo 'Format: {"metadata":"<id>","train":"<id>","val":"<id>","test":"<id>"}' >&2
+          # Pick whichever secret is set — SEMLEX_DATA_URLS (HF Hub mirror,
+          # preferred) wins over SEMLEX_DRIVE_FILES (Drive, quota-limited).
+          if [ -n "$SEMLEX_DATA_URLS" ]; then
+            echo "Using SEMLEX_DATA_URLS (direct HTTPS, recommended)"
+            SOURCE_JSON="$SEMLEX_DATA_URLS"
+            MODE="urls"
+          elif [ -n "$SEMLEX_DRIVE_FILES" ]; then
+            echo "Using SEMLEX_DRIVE_FILES (Drive IDs, subject to daily quota)"
+            SOURCE_JSON="$SEMLEX_DRIVE_FILES"
+            MODE="drive"
+          else
+            echo "ERROR: neither SEMLEX_DATA_URLS nor SEMLEX_DRIVE_FILES secret is set." >&2
+            echo "Add at: repo Settings → Secrets and variables → Actions." >&2
+            echo "Preferred (no quota): mirror to HF Hub via scripts/mirror_drive_to_hf.py" >&2
             exit 1
           fi
-          # Filter the secret JSON down to {metadata, <requested splits>} so the
-          # fetcher doesn't try to download splits we didn't ask for.
-          python <<'PY' > drive_subset.json
+          # Filter to {metadata, <requested splits>} so the fetcher doesn't try
+          # to download splits we didn't ask for.
+          export SOURCE_JSON MODE
+          python <<'PY' > subset.json
           import json, os
-          full = json.loads(os.environ["SEMLEX_DRIVE_FILES"])
+          full = json.loads(os.environ["SOURCE_JSON"])
           if "metadata" not in full:
-              raise SystemExit("SEMLEX_DRIVE_FILES missing required 'metadata' key")
+              raise SystemExit(f"{os.environ['MODE']} secret missing required 'metadata' key")
           out = {"metadata": full["metadata"]}
           for split in [s.strip() for s in os.environ["SPLITS"].split(",") if s.strip()]:
               if split not in {"train", "val", "test"}:
                   raise SystemExit(f"Unknown split {split!r}; must be one of train/val/test")
               if split not in full:
-                  raise SystemExit(f"Requested split {split!r} but no Drive ID in SEMLEX_DRIVE_FILES")
+                  raise SystemExit(f"Requested split {split!r} but no entry in source secret")
               out[split] = full[split]
           print(json.dumps(out))
           PY
-          echo "subset=$(cat drive_subset.json)" >> "$GITHUB_OUTPUT"
+          {
+            echo "subset=$(cat subset.json)"
+            echo "mode=$MODE"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Fetch Sem-Lex (stream-extract only matched videos; skips poses/*.tar.gz)
         if: inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both'
         env:
-          SEMLEX_DRIVE_FILES: ${{ steps.subset_drive.outputs.subset }}
+          # fetch_semlex.py reads whichever of these is non-empty.
+          # subset.outputs.mode tells us which variable to populate.
+          SEMLEX_DATA_URLS: ${{ steps.subset_drive.outputs.mode == 'urls' && steps.subset_drive.outputs.subset || '' }}
+          SEMLEX_DRIVE_FILES: ${{ steps.subset_drive.outputs.mode == 'drive' && steps.subset_drive.outputs.subset || '' }}
           SEMLEX_CLIPS_PER_SIGN: ${{ inputs.semlex_clips_per_sign }}
         run: python ml/scripts/fetch_semlex.py
 
