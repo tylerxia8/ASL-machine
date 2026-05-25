@@ -99,6 +99,8 @@ The workflow file: [.github/workflows/train_wave1.yml](.github/workflows/train_w
 The Sem-Lex fetcher (streams tarballs, extracts only matched clips, never touches `*-poses.tar.gz`): [ml/scripts/fetch_semlex.py](ml/scripts/fetch_semlex.py).
 Attestation that no Sem-Lex pretrained models or pose features are used: [docs/NO_PRETRAINED_MODELS.md](docs/NO_PRETRAINED_MODELS.md).
 
+**Drive quota workaround:** If `SEMLEX_DRIVE_FILES` hits Drive's per-file daily download quota, mirror once to Hugging Face Hub (recommended: via [`ml/notebooks/mirror_to_hf_colab.ipynb`](ml/notebooks/mirror_to_hf_colab.ipynb)) and add the resulting URLs as `SEMLEX_DATA_URLS` instead. Full walkthrough in [docs/MIRRORING_SEMLEX.md](docs/MIRRORING_SEMLEX.md).
+
 ### Path B — Local recording + local training
 
 For shakedown testing or if you can't run the CI workflow.

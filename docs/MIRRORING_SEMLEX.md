@@ -6,11 +6,26 @@ Google Drive's anonymous-download quota gets exhausted after a couple of partial
 
 Hugging Face Hub is the standard distribution channel for ML datasets. Public dataset files have no equivalent per-file daily quota, so once the four Sem-Lex files (1 metadata CSV + 3 video tarballs) are mirrored to a public HF dataset, the training workflow can hit them as many times as you want.
 
-The mirroring is a **one-time operation** that takes about 60 minutes (limited by your home upload bandwidth and HF's API). After it's done, the workflow swaps a single secret value and proceeds without quota ever being a concern again.
+The mirroring is a **one-time operation** that takes about 30–60 minutes. After it's done, the workflow swaps a single secret value and proceeds without quota ever being a concern again.
 
 We mirror **only the 4 files we actually use**. The 3 `*-poses.tar.gz` files are precomputed-pose-landmark output that rubric Req 7 forbids us from consuming, and we never touch them; mirroring them would be a waste of disk and a misleading signal that we use them.
 
-## Prereqs
+## Two paths
+
+| Path | Local disk needed | Drive quota matters? | When to use |
+|---|---|---|---|
+| **A. Colab (recommended)** | none — runs on Colab's ~100 GB ephemeral disk | No — uses your authenticated Drive quota | Default. Especially when local disk < 30 GB or anonymous-link quota is exhausted. |
+| B. Local script | ~30 GB free | Yes — uses anonymous-link quota | Only if you can't use Colab and have free disk + quota. |
+
+### Path A — Colab (recommended)
+
+Open [`ml/notebooks/mirror_to_hf_colab.ipynb`](../ml/notebooks/mirror_to_hf_colab.ipynb) in Colab (https://colab.research.google.com/ → Open notebook → GitHub tab → paste this repo's URL → pick the notebook). Run cells in order. The final cell prints the `SEMLEX_DATA_URLS` JSON snippet to paste into your GitHub secret. Skip the **Prereqs** section below — the notebook walks you through them.
+
+### Path B — Local script
+
+Continue with the prereqs below.
+
+## Prereqs (Path B only)
 
 1. **~30 GB free disk** on your local machine (the script downloads one file at a time and deletes after each upload, so peak usage is just the largest single file: train.tar.gz at 23.7 GB).
 2. **Hugging Face account** (free) — sign up at https://huggingface.co/join
