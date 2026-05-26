@@ -31,7 +31,34 @@ AUTO_START = "<!-- AUTO-METRICS:START -->"
 AUTO_END = "<!-- AUTO-METRICS:END -->"
 
 
-def _build_auto_block(ckpt: dict, sign_ids: list[str], acc: float, report: dict, cm: np.ndarray) -> str:
+def _confidence_bins(predictions: list[dict], step: float = 0.1) -> list[dict]:
+    bins: list[dict] = []
+    n_bins = int(1 / step)
+    for i in range(n_bins):
+        lo = i * step
+        hi = (i + 1) * step
+        rows = [
+            p for p in predictions
+            if p["confidence"] >= lo and (p["confidence"] < hi or (i == n_bins - 1 and p["confidence"] <= hi))
+        ]
+        correct = sum(1 for p in rows if p["correct"])
+        bins.append({
+            "range": f"{lo:.1f}-{hi:.1f}",
+            "count": len(rows),
+            "correct": correct,
+            "accuracy": (correct / len(rows)) if rows else None,
+        })
+    return bins
+
+
+def _build_auto_block(
+    ckpt: dict,
+    sign_ids: list[str],
+    acc: float,
+    report: dict,
+    cm: np.ndarray,
+    confidence_bins: list[dict] | None = None,
+) -> str:
     lines: list[str] = []
     lines.append(AUTO_START)
     lines.append("")
@@ -75,6 +102,15 @@ def _build_auto_block(ckpt: dict, sign_ids: list[str], acc: float, report: dict,
         lines.append("|--------|-----------|-------|")
         for count, t, p in confusions[:10]:
             lines.append(f"| {t} | {p} | {count} |")
+    if confidence_bins:
+        lines.append("")
+        lines.append("### Confidence calibration")
+        lines.append("")
+        lines.append("| Confidence | Clips | Correct | Accuracy |")
+        lines.append("|------------|-------|---------|----------|")
+        for b in confidence_bins:
+            accuracy = "n/a" if b["accuracy"] is None else f"{b['accuracy']:.2%}"
+            lines.append(f"| {b['range']} | {b['count']} | {b['correct']} | {accuracy} |")
     lines.append("")
     lines.append(AUTO_END)
     return "\n".join(lines)
@@ -153,11 +189,24 @@ def main():
     loader = DataLoader(test_ds, batch_size=16, shuffle=False)
     y_true: list[int] = []
     y_pred: list[int] = []
+    predictions: list[dict] = []
     with torch.no_grad():
         for x, y in loader:
-            pred = model(x).argmax(1).numpy()
-            y_pred.extend(pred.tolist())
-            y_true.extend(y.numpy().tolist())
+            logits = model(x)
+            probs = torch.softmax(logits, dim=1)
+            conf, pred = probs.max(1)
+            pred_list = pred.numpy().tolist()
+            true_list = y.numpy().tolist()
+            conf_list = conf.numpy().tolist()
+            y_pred.extend(pred_list)
+            y_true.extend(true_list)
+            for true_idx, pred_idx, confidence in zip(true_list, pred_list, conf_list):
+                predictions.append({
+                    "true_label": sign_ids[true_idx],
+                    "predicted_label": sign_ids[pred_idx],
+                    "confidence": float(confidence),
+                    "correct": true_idx == pred_idx,
+                })
 
     labels_idx = list(range(len(sign_ids)))
     report = classification_report(
@@ -166,7 +215,8 @@ def main():
     cm = confusion_matrix(y_true, y_pred, labels=labels_idx)
     acc = report["accuracy"]
 
-    auto_block = _build_auto_block(ckpt, sign_ids, acc, report, cm)
+    confidence_bins = _confidence_bins(predictions)
+    auto_block = _build_auto_block(ckpt, sign_ids, acc, report, cm, confidence_bins)
     report_path = Path(args.report)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     existing = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
@@ -182,6 +232,8 @@ def main():
                 "sign_ids": sign_ids,
                 "confusion_matrix": cm.tolist(),
                 "model_version": ckpt.get("model_version", "unknown"),
+                "predictions": predictions,
+                "confidence_bins": confidence_bins,
             },
             f,
             indent=2,

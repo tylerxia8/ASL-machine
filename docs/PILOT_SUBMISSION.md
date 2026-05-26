@@ -2,6 +2,8 @@
 
 Maps the rubric's 15 requirements and 7 final deliverables to specific artifacts in this repo. Reviewers can use this as the entry-point document; each link points at the file that satisfies the line item.
 
+Current readiness caveat: the bundled/best-available model is `wave1-semlex-full-v8`. It satisfies the technical deliverable of a trained, from-scratch ONNX model, but validation is not yet pilot-quality: signer-disjoint test accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up releases `wave1-semlex-full-v9` and `wave1-semlex-full-v9-small` did not improve the result. Treat the current model as an end-to-end integration/demo artifact until additional data collection and retraining improve accuracy.
+
 Project repo: https://github.com/tylerxia8/ASL-machine
 
 ## Final Deliverables (rubric §7)
@@ -119,6 +121,7 @@ Walk [`docs/WAVE1_DRY_RUN.md`](WAVE1_DRY_RUN.md) with 2–3 testers:
 | File | What |
 |---|---|
 | [README.md](../README.md) | Top-level orientation + two training paths |
+| [docs/REMAINING_WORK.md](REMAINING_WORK.md) | Remaining model-quality blockers and next training run checklist |
 | [docs/CONTROLLED_CONDITIONS.md](CONTROLLED_CONDITIONS.md) | Operational envelope (lighting, framing, distance, thresholds) |
 | [docs/DATASET_AND_TRAINING.md](DATASET_AND_TRAINING.md) | Data sources, clip format, splits, training command, ONNX export |
 | [docs/NO_PRETRAINED_MODELS.md](NO_PRETRAINED_MODELS.md) | Rubric Req 7 attestation + reproducible audit commands |

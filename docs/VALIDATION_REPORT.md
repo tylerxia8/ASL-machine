@@ -1,7 +1,7 @@
 # Validation Report — Wave 1
 
-> **Status: not yet validated on real data.**
-> The auto-metrics block below is empty until you train on captured clips. Run `ml/eval.py` to populate it. The narrative sections around the block are hand-edited and preserved across re-runs.
+> **Status: validated on the `wave1-semlex-full-v8` release, but not yet pilot-ready.**
+> The auto-metrics block below was populated by `ml/eval.py` from the release checkpoint. Accuracy is currently low, so the model should be treated as an integration/demo model until more data and retraining improve signer-disjoint performance.
 
 ## Pilot scope
 
@@ -16,20 +16,20 @@ This report covers the controlled production pilot of the ASL Learning with Comp
 - **Architecture:** [`SignClipCNN3D`](../ml/model.py) — three Conv3d blocks (32→64→128 channels) with BatchNorm + ReLU, followed by a fixed-kernel AvgPool3d(3,8,8) and a 256-unit fully-connected head. ~3.57M parameters total.
 - **Training from scratch:** all weights initialized with Kaiming-normal. No pretrained backbones, no pretrained landmark/pose detectors, no pretrained sign classifiers. See [`NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md) for the attestation.
 - **Input:** 24 RGB frames at 160×160, captured over a 2-second window (≈12 fps effective). Center-cropped to a square; pixel values normalized to [0, 1].
-- **Loss / optimizer:** cross-entropy, Adam at lr=1e-3, batch size 16. Trained for [N] epochs (fill in after run).
+- **Loss / optimizer:** cross-entropy, Adam-family training from scratch through the Wave 1 GitHub Actions workflow. The release metadata reports checkpoint validation accuracy of 8.79%.
 - **Augmentations applied during training:** _none in the v1 pipeline._ If signer-disjoint accuracy is weak, add horizontal flip, temporal jitter ±2 frames, and ±15% brightness/contrast (see [`ml/dataset.py`](../ml/dataset.py)).
 
 ## Dataset
 
 | Property | Value |
 |---|---|
-| Signers | [fill: e.g. 2 (signer_a, signer_b)] |
-| Clips per sign per signer | [fill: target 30] |
-| Total clips | [fill] |
+| Signers | Sem-Lex signer IDs |
+| Clips per sign per signer | Variable from Sem-Lex availability |
+| Total clips | Release artifact exports 220 signer-disjoint test clips; full train/val manifest was generated in CI but not bundled in this repo |
 | Train/Val/Test split | Signer-disjoint when ≥3 signers; otherwise random 70/15/15 within signers |
-| Lighting conditions | [fill: e.g. "single overhead room light, daytime sessions only"] |
-| Background | [fill: e.g. "plain off-white wall, no motion behind signer"] |
-| Capture sessions | [fill: e.g. "3 sessions across 2 days"] |
+| Lighting conditions | Sem-Lex conditions vary |
+| Background | Sem-Lex conditions vary |
+| Capture sessions | Sem-Lex source sessions |
 
 See [`CONTROLLED_CONDITIONS.md`](CONTROLLED_CONDITIONS.md) for the operational protocol.
 
@@ -90,23 +90,65 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 > This block is overwritten by `python ml/eval.py`. Edit the narrative
 > sections above/below; do not edit between these markers.
 
-**Model version:** _not yet trained_
-**Test accuracy (clip-level, signer-disjoint):** _pending_
-**Classes:** 25 (planned)
+**Model version:** `wave1-semlex-full-v8`
+**Test accuracy (clip-level, signer-disjoint):** 14.09%
+**Classes:** 25
+**Checkpoint val accuracy:** 0.08791208791208792
+**Confusion matrix shape:** 25×25
 
 ### Per-class metrics
 
-_Populated by eval.py after training._
+| Sign | Precision | Recall | F1 | Support |
+|------|-----------|--------|------|---------|
+| deaf | 0.00 | 0.00 | 0.00 | 13 |
+| eat | 0.00 | 0.00 | 0.00 | 12 |
+| five | 0.00 | 0.00 | 0.00 | 0 |
+| four | 0.00 | 0.00 | 0.00 | 2 |
+| friend | 0.00 | 0.00 | 0.00 | 19 |
+| goodbye | 0.00 | 0.00 | 0.00 | 1 |
+| hello | 0.00 | 0.00 | 0.00 | 3 |
+| help | 0.00 | 0.00 | 0.00 | 19 |
+| how | 0.00 | 0.00 | 0.00 | 4 |
+| meet | 0.00 | 0.00 | 0.00 | 8 |
+| name | 0.00 | 0.00 | 0.00 | 10 |
+| nice | 0.00 | 0.00 | 0.00 | 15 |
+| no | 0.00 | 0.00 | 0.00 | 6 |
+| one | 0.00 | 0.00 | 0.00 | 7 |
+| please | 0.00 | 0.00 | 0.00 | 4 |
+| sleep | 0.00 | 0.00 | 0.00 | 9 |
+| sorry | 0.00 | 0.00 | 0.00 | 1 |
+| thank_you | 0.00 | 0.00 | 0.00 | 2 |
+| three | 0.00 | 0.00 | 0.00 | 1 |
+| two | 0.00 | 0.00 | 0.00 | 3 |
+| water | 0.00 | 0.00 | 0.00 | 12 |
+| what | 0.00 | 0.00 | 0.00 | 10 |
+| where | 0.14 | 1.00 | 0.25 | 31 |
+| who | 0.00 | 0.00 | 0.00 | 23 |
+| yes | 0.00 | 0.00 | 0.00 | 5 |
+| **macro avg** | 0.01 | 0.04 | 0.01 | 220 |
 
 ### Most-confused pairs (top 10)
 
-_Populated by eval.py after training._
+| True → | Predicted | Count |
+|--------|-----------|-------|
+| who | where | 23 |
+| help | where | 19 |
+| friend | where | 18 |
+| nice | where | 14 |
+| deaf | where | 13 |
+| water | where | 12 |
+| eat | where | 12 |
+| what | where | 10 |
+| name | where | 10 |
+| sleep | where | 9 |
 
 <!-- AUTO-METRICS:END -->
 
 ## Confidence calibration
 
-After training, attach a histogram of confidence values bucketed by correct/incorrect prediction (manual analysis in a notebook is fine). If the model is overconfident on errors (a common failure mode of from-scratch CNNs on small datasets), consider:
+The `wave1-semlex-full-v8` release artifact does not include per-clip confidence values, so a calibration histogram cannot be reconstructed for that run. [`ml/eval.py`](../ml/eval.py) now writes per-clip predictions plus 0.1-wide confidence bins into `eval_metrics.json` and the auto-metrics block; rerun evaluation after the next training pass to populate this section with real calibration data.
+
+If the model is overconfident on errors (a common failure mode of from-scratch CNNs on small datasets), consider:
 
 - Raising the pass threshold to 0.95
 - Adding temperature scaling in `ml/eval.py` before the threshold check
@@ -114,7 +156,14 @@ After training, attach a histogram of confidence values bucketed by correct/inco
 
 ## Known limitations
 
-These are anticipated even before training; update with concrete observations after the first eval run.
+Concrete observations from `wave1-semlex-full-v8`:
+
+- **Current model is not pilot-quality.** Test accuracy is 14.09% with macro F1 0.01. The model collapses heavily toward `where`, so it is useful for end-to-end app integration but not reliable learner assessment.
+- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy. The next meaningful lever is training/architecture hardening against mode collapse on the Sem-Lex subset.
+- **`five` has zero test support in this release.** Accuracy for that class is unknown until the evaluation split includes held-out clips.
+- **Highest observed confusion pattern:** many classes are predicted as `where` (`who`, `help`, `friend`, `nice`, `deaf`, `water`, `eat`, `what`, `name`, `sleep`).
+
+General limitations:
 
 - **Small-sample generalization.** Two signers cannot cover the variation of all hand shapes, sizes, skin tones, and signing styles. Held-out signer accuracy is the relevant metric, not in-signer accuracy.
 - **No pose/landmark backbone.** Whole-frame 3D CNN trained from scratch on ~1,500 clips will plateau well below research benchmarks that use pretrained MediaPipe/OpenPose features. The pilot is not classroom-assessment-grade.
@@ -137,8 +186,8 @@ See [`NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md). Grep evidence and depe
 
 | Field | Value |
 |---|---|
-| Report version | 0.1 (skeleton) |
-| Last metrics run | _pending first training_ |
-| Trained checkpoint | _pending_ |
-| Exported ONNX | _pending_ |
+| Report version | 0.2 (`wave1-semlex-full-v8`) |
+| Last metrics run | 2026-05-26 release artifact |
+| Trained checkpoint | GitHub Actions release `wave1-semlex-full-v8` |
+| Exported ONNX | `apps/web/public/models/model.onnx` and release asset `wave1-semlex-full-v8/model.onnx` |
 | Reviewer | _name + date_ |

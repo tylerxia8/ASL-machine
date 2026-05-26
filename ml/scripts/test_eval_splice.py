@@ -15,7 +15,7 @@ except AttributeError:
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "ml"))
 
-from eval import AUTO_END, AUTO_START, _build_auto_block, _splice  # noqa: E402
+from eval import AUTO_END, AUTO_START, _build_auto_block, _confidence_bins, _splice  # noqa: E402
 
 
 def fake_classification_report() -> dict:
@@ -40,6 +40,18 @@ def main() -> int:
     assert "hello" in auto_block
     assert "test-v0" in auto_block
     print(f"[1/4] _build_auto_block OK ({len(auto_block.splitlines())} lines)")
+
+    bins = _confidence_bins([
+        {"confidence": 0.05, "correct": False},
+        {"confidence": 0.91, "correct": True},
+        {"confidence": 1.0, "correct": False},
+    ])
+    assert bins[0] == {"range": "0.0-0.1", "count": 1, "correct": 0, "accuracy": 0.0}
+    assert bins[9] == {"range": "0.9-1.0", "count": 2, "correct": 1, "accuracy": 0.5}
+    block_with_bins = _build_auto_block(ckpt, sign_ids, 0.875, fake_classification_report(), cm, bins)
+    assert "### Confidence calibration" in block_with_bins
+    assert "| 0.9-1.0 | 2 | 1 | 50.00% |" in block_with_bins
+    print("[1b/4] confidence calibration bins OK")
 
     narrative_before = (
         "# Validation Report — Wave 1\n\n"

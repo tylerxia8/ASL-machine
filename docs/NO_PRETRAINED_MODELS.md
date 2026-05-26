@@ -58,6 +58,27 @@ OpenCV is used **only for video decoding and pixel resize** ([`ml/scripts/import
 
 You can reproduce the attestation locally:
 
+PowerShell-friendly audit used on 2026-05-26:
+
+```powershell
+# Expected result: no matches.
+rg -n --glob "*.py" --glob "*.ts" --glob "*.tsx" `
+  "from_pretrained|mediapipe|torchvision\.models|timm\.|transformers|tensorflow_hub|ultralytics" `
+  ml apps\api apps\web\src
+
+# Expected result: only explicit false flags, comments/docstrings, and the
+# Sem-Lex pose-files warning in fetch_semlex.py.
+rg -n --glob "*.py" --glob "*.ts" --glob "*.tsx" "pretrained" ml apps\api apps\web\src
+
+# Expected result: only comments in fetch_semlex.py saying pose archives are
+# NOT DOWNLOADED.
+rg -n --glob "*.py" --glob "*.ts" --glob "*.tsx" `
+  "SL-GCN|SLGCN|sl_gcn|sl-gcn\.pt|gloss_recognition\.pt|sem-lex.*poses|semlex.*poses" `
+  ml apps scripts
+```
+
+Legacy Bash equivalent:
+
 ```bash
 # 1. No pretrained imports in production code
 grep -rE "pretrained|from_pretrained|mediapipe|torchvision\.models|timm\.|transformers|tensorflow_hub|ultralytics" \
@@ -88,5 +109,5 @@ python -c "from ml.model import build_model; m = build_model(25); print([(n, p.r
 | Field | Value |
 |---|---|
 | Attestation version | 1.0 |
-| Last verified | _(populate with the date of your last `grep` audit)_ |
+| Last verified | 2026-05-26 local `rg` audit |
 | Reviewer | _(name + date)_ |

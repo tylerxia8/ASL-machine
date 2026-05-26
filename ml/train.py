@@ -33,6 +33,10 @@ def main():
                              "Set to 0 to disable.")
     parser.add_argument("--weight-decay", type=float, default=1e-4,
                         help="Adam weight decay — helps fight mode collapse.")
+    parser.add_argument("--label-smoothing", type=float, default=0.05,
+                        help="Small cross-entropy label smoothing to reduce early overconfidence.")
+    parser.add_argument("--max-grad-norm", type=float, default=1.0,
+                        help="Clip gradient norm after backprop. Set to 0 to disable.")
     parser.add_argument("--balanced-sampling", action="store_true", default=True,
                         help="Use WeightedRandomSampler so every batch has roughly uniform class "
                              "representation. Defends against mode collapse when class counts "
@@ -94,11 +98,12 @@ def main():
     # Cosine annealing decays LR from args.lr down to 0 over args.epochs.
     # Smooth decay helps avoid the late-epoch mode collapse observed in v5/v6.
     scheduler = CosineAnnealingLR(opt, T_max=args.epochs)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
 
     ckpt_dir = ML_ROOT / "checkpoints" / args.model_version
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     best_acc = 0.0
+    best_distinct_preds = 0
     epochs_since_improvement = 0
     val_acc_history: list[float] = []
 
@@ -111,6 +116,8 @@ def main():
             logits = model(x)
             loss = criterion(logits, y)
             loss.backward()
+            if args.max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), args.max_grad_norm)
             opt.step()
             total_loss += loss.item()
         scheduler.step()
@@ -136,8 +143,11 @@ def main():
         print(f"Epoch {epoch+1}: loss={avg_loss:.4f} val_acc={acc:.4f} "
               f"distinct_preds={n_distinct_preds}/{len(sign_ids)}{collapse_flag}")
 
-        if acc >= best_acc:
+        improved = acc > best_acc
+        tied_but_more_diverse = acc == best_acc and n_distinct_preds > best_distinct_preds
+        if improved or tied_but_more_diverse:
             best_acc = acc
+            best_distinct_preds = n_distinct_preds
             epochs_since_improvement = 0
             torch.save(
                 {
@@ -167,6 +177,9 @@ def main():
         "sign_ids": sign_ids,
         "val_accuracy": best_acc,
         "val_acc_history": val_acc_history,
+        "val_distinct_preds": best_distinct_preds,
+        "label_smoothing": args.label_smoothing,
+        "max_grad_norm": args.max_grad_norm,
         "params": n_params,
         "pretrained": False,
     }
