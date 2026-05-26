@@ -33,16 +33,29 @@ Local training hardening now added and verified in the v10 run:
 - Gradients are clipped by default (`--max-grad-norm 1.0`)
 - Checkpoint selection now breaks validation-accuracy ties in favor of more distinct predicted classes
 - `ml/eval.py` now exports per-clip predictions plus 0.1-wide confidence bins
+- `ml/scripts/overfit_probe.py` can test whether the current model can memorize a tiny per-class subset before launching another full training job
 
 ## Next training/diagnostic work
 
 Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The next useful work is diagnosis and architecture/training changes:
 
-- Add a tiny per-class overfit check: can the model memorize 2-5 clips per sign?
+- Run the tiny per-class overfit check: can the model memorize 2-5 clips per sign?
 - Inspect label/video alignment for classes that collapse or have near-zero recall.
 - Try lower learning rates and class-balanced sampling/loss on Sem-Lex only.
 - Consider a stronger temporal architecture than the current whole-frame 3D CNN, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
+
+Example overfit probe command after a Sem-Lex manifest exists locally:
+
+```powershell
+.\ml\.venv\Scripts\python.exe ml/scripts/overfit_probe.py `
+  --manifest ml/data/manifest.json `
+  --split train `
+  --samples-per-class 3 `
+  --max-classes 10 `
+  --epochs 20 `
+  --model-size small
+```
 
 After training:
 
