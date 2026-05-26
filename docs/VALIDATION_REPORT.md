@@ -146,7 +146,16 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 
 ## Confidence calibration
 
-The `wave1-semlex-full-v8` release artifact does not include per-clip confidence values, so a calibration histogram cannot be reconstructed for that run. [`ml/eval.py`](../ml/eval.py) now writes per-clip predictions plus 0.1-wide confidence bins into `eval_metrics.json` and the auto-metrics block; rerun evaluation after the next training pass to populate this section with real calibration data.
+The `wave1-semlex-full-v8` release artifact does not include per-clip confidence values, so a calibration histogram cannot be reconstructed for that bundled model. [`ml/eval.py`](../ml/eval.py) now writes per-clip predictions plus 0.1-wide confidence bins into `eval_metrics.json` and the auto-metrics block.
+
+The follow-up `wave1-semlex-full-v10-hardened` run produced calibration data, but it did not beat v8 and should not replace the bundled model. Its predictions were mostly low-confidence:
+
+| Confidence bin | Clips | Correct | Accuracy |
+|---|---:|---:|---:|
+| 0.0-0.1 | 204 | 10 | 4.9% |
+| 0.1-0.2 | 16 | 0 | 0.0% |
+
+There were no predictions above 0.2 confidence in that run.
 
 If the model is overconfident on errors (a common failure mode of from-scratch CNNs on small datasets), consider:
 
@@ -159,7 +168,7 @@ If the model is overconfident on errors (a common failure mode of from-scratch C
 Concrete observations from `wave1-semlex-full-v8`:
 
 - **Current model is not pilot-quality.** Test accuracy is 14.09% with macro F1 0.01. The model collapses heavily toward `where`, so it is useful for end-to-end app integration but not reliable learner assessment.
-- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy. The next meaningful lever is training/architecture hardening against mode collapse on the Sem-Lex subset.
+- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy; `wave1-semlex-full-v10-hardened` dropped to 4.55% accuracy with macro F1 0.01141. The next meaningful lever is deeper diagnosis and architecture/training improvement on the Sem-Lex subset, not another identical run.
 - **`five` has zero test support in this release.** Accuracy for that class is unknown until the evaluation split includes held-out clips.
 - **Highest observed confusion pattern:** many classes are predicted as `where` (`who`, `help`, `friend`, `nice`, `deaf`, `water`, `eat`, `what`, `name`, `sleep`).
 
