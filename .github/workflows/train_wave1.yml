@@ -58,6 +58,26 @@ on:
         description: "Training epochs"
         type: number
         default: 20
+      learning_rate:
+        description: "Adam learning rate passed to ml/train.py"
+        type: string
+        default: "0.001"
+      weight_decay:
+        description: "Adam weight decay passed to ml/train.py"
+        type: string
+        default: "0.0001"
+      label_smoothing:
+        description: "Cross-entropy label smoothing passed to ml/train.py"
+        type: string
+        default: "0.05"
+      max_grad_norm:
+        description: "Gradient clipping norm; 0 disables clipping"
+        type: string
+        default: "1.0"
+      early_stop_patience:
+        description: "Epochs without val improvement before stopping; 0 disables"
+        type: number
+        default: 4
       model_size:
         description: "Model capacity. 'small' (~720K params) for <2k clips; 'default' (~3.57M) otherwise"
         type: choice
@@ -235,7 +255,12 @@ jobs:
             --manifest ml/data/manifest.json \
             --epochs ${{ inputs.epochs }} \
             --model-version ${{ inputs.model_version }} \
-            --model-size ${{ inputs.model_size }}
+            --model-size ${{ inputs.model_size }} \
+            --lr ${{ inputs.learning_rate }} \
+            --weight-decay ${{ inputs.weight_decay }} \
+            --label-smoothing ${{ inputs.label_smoothing }} \
+            --max-grad-norm ${{ inputs.max_grad_norm }} \
+            --early-stop-patience ${{ inputs.early_stop_patience }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
         if: ${{ !inputs.probe_only }}
@@ -278,6 +303,11 @@ jobs:
             Trained from scratch on dataset source: `${{ inputs.dataset_source }}`.
             Sem-Lex splits used: `${{ inputs.semlex_splits }}`.
             Epochs: ${{ inputs.epochs }}.
+            Model size: `${{ inputs.model_size }}`.
+            Learning rate: `${{ inputs.learning_rate }}`.
+            Weight decay: `${{ inputs.weight_decay }}`.
+            Label smoothing: `${{ inputs.label_smoothing }}`.
+            Max grad norm: `${{ inputs.max_grad_norm }}`.
 
             ## Files
             - `model.onnx` — drop into `apps/web/public/models/`

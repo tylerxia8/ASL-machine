@@ -46,13 +46,14 @@ Local training hardening now added and verified in the v10 run:
 - `ml/scripts/overfit_probe.py` can test whether the current model can memorize a tiny per-class subset before launching another full training job
 - `.github/workflows/train_wave1.yml` runs the overfit probe by default before Sem-Lex-backed full training; set `run_overfit_probe=false` only when intentionally bypassing that diagnostic
 - The training workflow also supports `probe_only=true`, which stops after fetch/decode/manifest/probe and skips train/export/release
+- The training workflow exposes trainer hyperparameters (`learning_rate`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
 
 ## Next training/diagnostic work
 
 Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The probe-only run confirms the stack can memorize a tiny Sem-Lex subset, so the next useful work is generalization-focused diagnosis and architecture/training changes:
 
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
-- Try lower learning rates and class-balanced sampling/loss on Sem-Lex only.
+- Try lower learning rates and class-balanced sampling/loss on Sem-Lex only. Suggested next run: `learning_rate=0.0003`, `label_smoothing=0.0`, `model_size=small`, `epochs=30`.
 - Consider a stronger temporal architecture than the current whole-frame 3D CNN, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
 
