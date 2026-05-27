@@ -2,7 +2,7 @@
 
 Maps the rubric's 15 requirements and 7 final deliverables to specific artifacts in this repo. Reviewers can use this as the entry-point document; each link points at the file that satisfies the line item.
 
-Current readiness caveat: the bundled/best-available model is `wave1-semlex-full-v8`. It satisfies the technical deliverable of a trained, from-scratch ONNX model, but validation is not yet pilot-quality: signer-disjoint test accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up releases through `wave1-semlex-full-v13-tcn` did not improve the bundled accuracy. Treat the current model as an end-to-end integration/demo artifact until additional diagnosis, data work, and retraining improve accuracy.
+Current readiness caveat: the bundled/best-available model is `wave1-semlex-full-v8`. It satisfies the technical deliverable of a trained, from-scratch ONNX model, but validation is not yet pilot-quality: signer-disjoint test accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up releases through `wave1-semlex-full-v14-tcn-balanced-split` did not improve the bundled accuracy. Treat the current model as an end-to-end integration/demo artifact until additional diagnosis, data work, and retraining improve accuracy.
 
 Project repo: https://github.com/tylerxia8/ASL-machine
 

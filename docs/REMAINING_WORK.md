@@ -20,6 +20,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-full-v11-lr3e4-small` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, small model, learning rate 0.0003, no label smoothing | 3.18% test accuracy, macro F1 0.00561. Probe passed first, but full training still failed to generalize; predictions concentrated on `what` and `no`. |
 | `wave1-semlex-full-v12-frame` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=frame`, learning rate 0.0005, no label smoothing | 4.55% test accuracy, macro F1 0.01601. Better macro F1 than v8/v11 but still far below v8 accuracy; do not replace bundled model. |
 | `wave1-semlex-full-v13-tcn` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=tcn`, learning rate 0.0005, no label smoothing | 6.82% test accuracy, macro F1 0.02255. Best macro F1 so far, but still below v8 accuracy; do not replace bundled model. |
+| `wave1-semlex-full-v14-tcn-balanced-split` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=tcn`, learning rate 0.0005, no label smoothing, coverage-aware signer-disjoint split | 5.70% test accuracy, macro F1 0.03441. Best macro F1 so far and improved test coverage diagnostics, but still far below v8 accuracy; do not replace bundled model. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
@@ -56,6 +57,17 @@ After changing the signer-disjoint selection to maximize sign coverage and balan
 - Zero-val-support signs: 1 / 24 (`four`, with only one non-test clip)
 - Overfit probe: PASS at 95% memorization accuracy
 
+The first full run after the split fix, `wave1-semlex-full-v14-tcn-balanced-split` (`26538861231`), showed the split fix worked on the full Sem-Lex-backed Wave 1 dataset but did not solve model quality:
+
+- Manifest clips: 1,411
+- Split counts: 750 train / 117 val / 544 test
+- Signer-disjoint test split: OK
+- Zero-test-support signs: 0 / 25
+- Zero-val-support signs: 1 / 25 (`five`, with only 1 train clip and 1 test clip)
+- Overfit probe: PASS
+- Test result: 5.70% accuracy, macro F1 0.03441, weighted F1 0.04886
+- Prediction spread improved compared with the old `where` collapse, but predictions still concentrated on a few labels (`nice`, `no`, `one`, `help`, `four`, `where`) and accuracy stayed below the v8 bundled model.
+
 Local training hardening now added and verified in the v10 run:
 
 - `ml/train.py` uses light label smoothing by default (`--label-smoothing 0.05`)
@@ -72,9 +84,9 @@ Local training hardening now added and verified in the v10 run:
 
 ## Next training/diagnostic work
 
-Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model is the best macro-F1 experiment so far, but still not pilot-quality. The next useful work is generalization-focused diagnosis and stronger architecture/training changes:
+Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model improved macro F1, and v14 confirmed the split coverage fix on the full dataset, but neither is pilot-quality. The next useful work is preprocessing/visual diagnosis plus stronger architecture/training changes:
 
-- Inspect `manifest_report.json` in the next release to identify signs with zero/low held-out support and signer imbalance before interpreting model accuracy.
+- Inspect Sem-Lex frame crops/contact sheets for low-recall and high-confusion signs. The current importer center-crops to a square, which may cut off hands or signing space for some videos.
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
 - Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
@@ -101,4 +113,4 @@ After training:
 
 ## Current blocker summary
 
-The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, `wave1-semlex-full-v12-frame`, and `wave1-semlex-full-v13-tcn`) did not improve the bundled accuracy, so the next meaningful step is stronger architecture/training improvement on Sem-Lex.
+The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, `wave1-semlex-full-v12-frame`, `wave1-semlex-full-v13-tcn`, and `wave1-semlex-full-v14-tcn-balanced-split`) did not improve the bundled accuracy, so the next meaningful step is preprocessing/visual diagnosis and stronger architecture/training improvement on Sem-Lex.
