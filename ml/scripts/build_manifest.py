@@ -134,17 +134,28 @@ def main():
         else:
             print(f"Signer-disjoint split: {len(test_signers)} test signer(s) "
                   f"out of {len(unique_signers)} unique: {sorted(test_signers)}")
+            train_val_by_sign: dict[str, list[dict]] = defaultdict(list)
             for c in clips:
                 if c["signer_id"] in test_signers:
-                    split = "test"
+                    manifest_clips.append({**c, "split": "test"})
                 else:
-                    split = "train" if random.random() < 0.85 else "val"
-                manifest_clips.append({**c, "split": split})
+                    train_val_by_sign[c["sign_id"]].append(c)
+            for sign_id, group in sorted(train_val_by_sign.items()):
+                random.shuffle(group)
+                n_val = max(1, int(len(group) * args.val_ratio)) if len(group) >= 2 else 0
+                for i, c in enumerate(group):
+                    split = "val" if i < n_val else "train"
+                    manifest_clips.append({**c, "split": split})
             test_signs = {c["sign_id"] for c in manifest_clips if c["split"] == "test"}
             missing_test = sorted(sign_ids - test_signs)
             if missing_test:
                 print(f"WARNING: {len(missing_test)} sign(s) have zero signer-disjoint "
                       f"test support: {missing_test}")
+            val_signs = {c["sign_id"] for c in manifest_clips if c["split"] == "val"}
+            missing_val = sorted(sign_ids - val_signs)
+            if missing_val:
+                print(f"WARNING: {len(missing_val)} sign(s) have zero validation "
+                      f"support after signer-disjoint holdout: {missing_val}")
     else:
         by_sign = {}
         for c in clips:

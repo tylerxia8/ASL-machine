@@ -60,6 +60,7 @@ Local training hardening now added and verified in the v10 run:
 - The training workflow exposes trainer hyperparameters (`learning_rate`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
 - `ml/scripts/manifest_report.py` reports split/sign/signer coverage before training and is uploaded as `manifest_report.json` with future releases
 - `ml/scripts/build_manifest.py` now chooses signer-disjoint test signers by greedy Wave 1 sign coverage instead of sorted signer ID, reducing accidental zero-test-support signs
+- After selecting held-out test signers, `build_manifest.py` also assigns validation clips per sign where at least two non-test clips remain, reducing accidental zero-val-support signs
 
 ## Next training/diagnostic work
 
