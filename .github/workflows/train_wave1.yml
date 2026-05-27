@@ -87,6 +87,13 @@ on:
           - frame
           - tcn
         default: small
+      preprocess:
+        description: "Raw video resize mode before training"
+        type: choice
+        options:
+          - center_crop
+          - letterbox
+        default: center_crop
       model_version:
         description: "Model version tag (also used for release tag)"
         type: string
@@ -211,7 +218,7 @@ jobs:
           echo "Total staged: $(ls ml/data/incoming/ | wc -l)"
 
       - name: Decode videos → .npz
-        run: python ml/scripts/import_captures.py
+        run: python ml/scripts/import_captures.py --resize-mode ${{ inputs.preprocess }}
 
       - name: Build manifest (signer-disjoint when ≥3 signers, else random split)
         run: python ml/scripts/build_manifest.py --wave1 --signer-disjoint
@@ -288,7 +295,8 @@ jobs:
             --weight-decay ${{ inputs.weight_decay }} \
             --label-smoothing ${{ inputs.label_smoothing }} \
             --max-grad-norm ${{ inputs.max_grad_norm }} \
-            --early-stop-patience ${{ inputs.early_stop_patience }}
+            --early-stop-patience ${{ inputs.early_stop_patience }} \
+            --preprocess ${{ inputs.preprocess }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
         if: ${{ !inputs.probe_only }}
@@ -334,6 +342,7 @@ jobs:
             Sem-Lex splits used: `${{ inputs.semlex_splits }}`.
             Epochs: ${{ inputs.epochs }}.
             Model size: `${{ inputs.model_size }}`.
+            Preprocess: `${{ inputs.preprocess }}`.
             Learning rate: `${{ inputs.learning_rate }}`.
             Weight decay: `${{ inputs.weight_decay }}`.
             Label smoothing: `${{ inputs.label_smoothing }}`.

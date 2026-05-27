@@ -9,6 +9,7 @@ export type LabelsFile = {
   n_features?: number;
   num_frames?: number;
   frame_size?: number;
+  preprocess?: "center_crop" | "letterbox";
 };
 
 export class ModelUnavailableError extends Error {

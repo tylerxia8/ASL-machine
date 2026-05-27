@@ -61,6 +61,7 @@ def main():
         "input_type": "3d",
         "num_frames": 24,
         "frame_size": 160,
+        "preprocess": ckpt.get("preprocess", "center_crop"),
     }
     with open(out_dir / "labels.json", "w", encoding="utf-8") as f:
         json.dump(labels, f, indent=2)
@@ -77,6 +78,7 @@ def main():
         "label_smoothing": ckpt.get("label_smoothing"),
         "max_grad_norm": ckpt.get("max_grad_norm"),
         "balanced_sampling": ckpt.get("balanced_sampling"),
+        "preprocess": ckpt.get("preprocess", "center_crop"),
         "pretrained": False,
         "input_shape": [1, 3, 24, 160, 160],
     }

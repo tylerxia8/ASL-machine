@@ -18,18 +18,32 @@ export async function requestCamera(): Promise<MediaStream> {
 }
 
 type Planes = [number[], number[], number[]];
+export type PreprocessMode = "center_crop" | "letterbox";
 
 function grabFrame(
   video: HTMLVideoElement,
   ctx: CanvasRenderingContext2D,
-  size: number
+  size: number,
+  preprocess: PreprocessMode = "center_crop"
 ): Planes {
   const vw = video.videoWidth || 640;
   const vh = video.videoHeight || 480;
-  const side = Math.min(vw, vh);
-  const sx = (vw - side) / 2;
-  const sy = (vh - side) / 2;
-  ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
+  ctx.clearRect(0, 0, size, size);
+  if (preprocess === "letterbox") {
+    const scale = Math.min(size / vw, size / vh);
+    const dw = vw * scale;
+    const dh = vh * scale;
+    const dx = (size - dw) / 2;
+    const dy = (size - dh) / 2;
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(video, 0, 0, vw, vh, dx, dy, dw, dh);
+  } else {
+    const side = Math.min(vw, vh);
+    const sx = (vw - side) / 2;
+    const sy = (vh - side) / 2;
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
+  }
   const img = ctx.getImageData(0, 0, size, size);
   const n = size * size;
   const r = new Array<number>(n);
@@ -52,7 +66,8 @@ export async function captureFramesAsync(
   video: HTMLVideoElement,
   count: number,
   size: number,
-  durationMs: number
+  durationMs: number,
+  preprocess: PreprocessMode = "center_crop"
 ): Promise<Planes[]> {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -65,7 +80,7 @@ export async function captureFramesAsync(
     const targetT = start + i * step;
     const wait = targetT - performance.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    frames.push(grabFrame(video, ctx, size));
+    frames.push(grabFrame(video, ctx, size, preprocess));
   }
   return frames;
 }
@@ -79,14 +94,15 @@ export async function captureFramesAsync(
 export function captureFrames(
   video: HTMLVideoElement,
   count: number,
-  size: number
+  size: number,
+  preprocess: PreprocessMode = "center_crop"
 ): Planes[] {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d")!;
   const frames: Planes[] = [];
-  for (let i = 0; i < count; i++) frames.push(grabFrame(video, ctx, size));
+  for (let i = 0; i < count; i++) frames.push(grabFrame(video, ctx, size, preprocess));
   return frames;
 }
 

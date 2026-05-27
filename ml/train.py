@@ -44,6 +44,9 @@ def main():
                              "representation. Defends against mode collapse when class counts "
                              "are unequal (some Wave 1 signs cap at 100, others at 1).")
     parser.add_argument("--no-balanced-sampling", dest="balanced_sampling", action="store_false")
+    parser.add_argument("--preprocess", choices=["center_crop", "letterbox"], default="center_crop",
+                        help="Video resize/preprocess mode used to create the training clips. "
+                             "Stored in checkpoint/export metadata for browser inference.")
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -166,6 +169,7 @@ def main():
                     "label_smoothing": args.label_smoothing,
                     "max_grad_norm": args.max_grad_norm,
                     "balanced_sampling": args.balanced_sampling,
+                    "preprocess": args.preprocess,
                 },
                 ckpt_dir / "best.pt",
             )
@@ -190,6 +194,7 @@ def main():
         "label_smoothing": args.label_smoothing,
         "max_grad_norm": args.max_grad_norm,
         "balanced_sampling": args.balanced_sampling,
+        "preprocess": args.preprocess,
         "params": n_params,
         "pretrained": False,
     }

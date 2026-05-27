@@ -74,11 +74,12 @@ Local training hardening now added and verified in the v10 run:
 - Gradients are clipped by default (`--max-grad-norm 1.0`)
 - Checkpoint selection now breaks validation-accuracy ties in favor of more distinct predicted classes
 - `ml/eval.py` now exports per-clip predictions plus 0.1-wide confidence bins
-- `ml/scripts/import_captures.py` stores each clip's original `source_path` in the `.npz` so visual QA can compare raw videos with imported model frames
+- `ml/scripts/import_captures.py` stores each clip's original `source_path` and `resize_mode` in the `.npz` so visual QA can compare raw videos with imported model frames
 - `ml/scripts/overfit_probe.py` can test whether the current model can memorize a tiny per-class subset before launching another full training job
 - `.github/workflows/train_wave1.yml` runs the overfit probe by default before Sem-Lex-backed full training; set `run_overfit_probe=false` only when intentionally bypassing that diagnostic
 - The training workflow also supports `probe_only=true`, which stops after fetch/decode/manifest/probe and skips train/export/release
 - The training workflow exposes trainer hyperparameters (`learning_rate`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
+- The training workflow supports `preprocess=center_crop|letterbox`; exported labels include the preprocessing mode so browser inference can match the trained model's frame transform
 - `ml/scripts/manifest_report.py` reports split/sign/signer coverage before training and is uploaded as `manifest_report.json` with future releases
 - `ml/scripts/make_contact_sheets.py` renders visual QA sheets from imported clips, and from raw staged videos when available, so the next Sem-Lex run can inspect whether center-cropping removes hands/signing space
 - `ml/scripts/build_manifest.py` now chooses signer-disjoint test signers by greedy Wave 1 sign coverage instead of sorted signer ID, reducing accidental zero-test-support signs

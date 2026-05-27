@@ -122,7 +122,8 @@ export default function PracticePage() {
       videoRef.current,
       captureFrameCount,
       captureSz,
-      RECORD_MS
+      RECORD_MS,
+      meta?.preprocess ?? "center_crop"
     );
     setPhase("evaluating");
     const tensor =

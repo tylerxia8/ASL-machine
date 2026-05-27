@@ -122,22 +122,24 @@ def _clip_num_from_npz(path: Path) -> str | None:
     return f"{int(m.group(1)):04d}"
 
 
-def _source_video_from_npz(path: Path) -> Path | None:
+def _npz_metadata(path: Path) -> tuple[Path | None, str]:
     try:
         with np.load(path) as data:
-            if "source_path" not in data:
-                return None
-            raw_value = data["source_path"]
+            raw_value = data["source_path"] if "source_path" in data else ""
+            mode_value = data["resize_mode"] if "resize_mode" in data else "center_crop"
     except Exception:
-        return None
+        return None, "center_crop"
 
     source = str(raw_value.item() if hasattr(raw_value, "item") else raw_value)
-    if not source:
-        return None
-    source_path = Path(source)
-    if not source_path.is_absolute():
-        source_path = ROOT / source_path
-    return source_path if source_path.exists() else None
+    mode = str(mode_value.item() if hasattr(mode_value, "item") else mode_value) or "center_crop"
+    source_path = None
+    if source:
+        source_path = Path(source)
+        if not source_path.is_absolute():
+            source_path = ROOT / source_path
+        if not source_path.exists():
+            source_path = None
+    return source_path, mode
 
 
 def _select_rows(manifest: dict, split: str, signs: set[str] | None, max_signs: int,
@@ -158,12 +160,17 @@ def _select_rows(manifest: dict, split: str, signs: set[str] | None, max_signs: 
 
 
 def _draw_clip_cell(draw: ImageDraw.ImageDraw, sheet: Image.Image, x: int, y: int, row: dict,
-                    processed: np.ndarray, raw_images: list[Image.Image] | None, frame_count: int) -> None:
+                    processed: np.ndarray, raw_images: list[Image.Image] | None,
+                    frame_count: int, resize_mode: str) -> None:
     title_font = _font(13)
     small_font = _font(11)
     label = f"{row['sign_id']} / {row.get('signer_id', 'unknown')} / {Path(row['path']).name}"
     draw.text((x, y), label[:80], fill=INK, font=title_font)
-    draw.text((x, y + 16), "raw crop box -> imported model frame" if raw_images else "imported model frames", fill=MUTED, font=small_font)
+    if raw_images:
+        raw_note = "raw crop box -> imported model frame" if resize_mode == "center_crop" else "raw full frame -> letterboxed model frame"
+    else:
+        raw_note = "imported model frames"
+    draw.text((x, y + 16), raw_note, fill=MUTED, font=small_font)
 
     proc_idx = _resample_indices(processed.shape[0], frame_count)
     for col, idx in enumerate(proc_idx):
@@ -172,9 +179,12 @@ def _draw_clip_cell(draw: ImageDraw.ImageDraw, sheet: Image.Image, x: int, y: in
         if raw_images:
             raw = raw_images[col]
             raw_box = _letterbox(raw, (CELL_W, CELL_H_RAW))
-            r = _crop_rect_in_letterbox(raw, (CELL_W, CELL_H_RAW))
             raw_draw = ImageDraw.Draw(raw_box)
-            raw_draw.rectangle(r, outline=ACCENT, width=3)
+            if resize_mode == "center_crop":
+                r = _crop_rect_in_letterbox(raw, (CELL_W, CELL_H_RAW))
+                raw_draw.rectangle(r, outline=ACCENT, width=3)
+            else:
+                raw_draw.rectangle((1, 1, CELL_W - 2, CELL_H_RAW - 2), outline=(40, 160, 90), width=3)
             raw_draw.text((4, 4), f"raw {idx + 1}", fill=(255, 255, 255), font=small_font)
             sheet.paste(raw_box, (cx, cy))
             cy += CELL_H_RAW + 4
@@ -203,7 +213,7 @@ def render_sheet(rows: list[dict], out_path: Path, video_dir: Path, frames_per_c
         processed = load_clip(clip_path)
 
         raw_images = None
-        raw_path = _source_video_from_npz(clip_path)
+        raw_path, resize_mode = _npz_metadata(clip_path)
         if raw_path is None:
             clip_num = _clip_num_from_npz(clip_path)
             if clip_num:
@@ -214,7 +224,7 @@ def render_sheet(rows: list[dict], out_path: Path, video_dir: Path, frames_per_c
                 raw_matches += 1
             except Exception as exc:
                 print(f"WARNING: could not read raw video {raw_path}: {exc}", file=sys.stderr)
-        _draw_clip_cell(draw, sheet, PAD, y, row, processed, raw_images, frames_per_clip)
+        _draw_clip_cell(draw, sheet, PAD, y, row, processed, raw_images, frames_per_clip, resize_mode)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(out_path)

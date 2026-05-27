@@ -92,8 +92,9 @@ def main() -> int:
         "input_type": "3d",
         "num_frames": 24,
         "frame_size": 160,
+        "preprocess": "center_crop",
     }
-    required = {"sign_ids", "label_to_idx", "model_version", "input_type", "num_frames", "frame_size"}
+    required = {"sign_ids", "label_to_idx", "model_version", "input_type", "num_frames", "frame_size", "preprocess"}
     assert required.issubset(schema), f"labels.json schema missing: {required - schema.keys()}"
     print(f"\nlabels.json schema OK: {sorted(schema.keys())}")
     print("\nSMOKE PASS — canonical training/export/inference pipeline is intact.")
