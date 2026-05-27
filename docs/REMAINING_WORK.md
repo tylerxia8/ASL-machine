@@ -40,6 +40,14 @@ The probe-only run (`26516283720`) used the Sem-Lex `val` split as a smaller dia
 - Overfit probe: 20 clips, 10 classes, 2 clips/class, small model, dropout disabled
 - Result: PASS at 90% memorization accuracy by epoch 17
 
+A later probe-only workflow (`26536422324`) verified the manifest report step on real Sem-Lex data:
+
+- Restricted input: Sem-Lex `val` split, 20 clips/sign cap
+- Manifest clips: 322
+- Signer-disjoint test split: OK
+- Zero-test-support signs in that restricted diagnostic split: 13 / 24
+- Overfit probe: PASS at 90% memorization accuracy
+
 Local training hardening now added and verified in the v10 run:
 
 - `ml/train.py` uses light label smoothing by default (`--label-smoothing 0.05`)

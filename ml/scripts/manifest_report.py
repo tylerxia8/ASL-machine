@@ -83,7 +83,11 @@ def print_report(report: dict, *, max_rows: int) -> None:
     print(f"Signers by split: {report['num_signers_by_split']}")
     print(f"Signer-disjoint OK: {report['signer_disjoint_ok']}")
     if report["signer_overlap"]:
-        print(f"WARNING: signer(s) appear in multiple splits: {report['signer_overlap']}")
+        if report["signer_disjoint_ok"]:
+            print("Signer overlap outside held-out test split: "
+                  f"{report['signer_overlap']}")
+        else:
+            print(f"WARNING: test signer leakage across splits: {report['signer_overlap']}")
     print(f"Test signer IDs: {report['test_signers']}")
 
     for split in ["train", "val", "test"]:
