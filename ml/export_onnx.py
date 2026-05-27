@@ -67,8 +67,16 @@ def main():
 
     meta = {
         "model_version": ckpt.get("model_version", "v1"),
+        "model_size": size,
         "num_classes": len(sign_ids),
         "val_accuracy": ckpt.get("val_accuracy"),
+        "val_distinct_preds": ckpt.get("val_distinct_preds"),
+        "val_acc_history": ckpt.get("val_acc_history"),
+        "learning_rate": ckpt.get("learning_rate"),
+        "weight_decay": ckpt.get("weight_decay"),
+        "label_smoothing": ckpt.get("label_smoothing"),
+        "max_grad_norm": ckpt.get("max_grad_norm"),
+        "balanced_sampling": ckpt.get("balanced_sampling"),
         "pretrained": False,
         "input_shape": [1, 3, 24, 160, 160],
     }

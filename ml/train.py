@@ -161,6 +161,11 @@ def main():
                     "val_accuracy": acc,
                     "val_distinct_preds": n_distinct_preds,
                     "val_acc_history": val_acc_history,
+                    "learning_rate": args.lr,
+                    "weight_decay": args.weight_decay,
+                    "label_smoothing": args.label_smoothing,
+                    "max_grad_norm": args.max_grad_norm,
+                    "balanced_sampling": args.balanced_sampling,
                 },
                 ckpt_dir / "best.pt",
             )
@@ -180,8 +185,11 @@ def main():
         "val_accuracy": best_acc,
         "val_acc_history": val_acc_history,
         "val_distinct_preds": best_distinct_preds,
+        "learning_rate": args.lr,
+        "weight_decay": args.weight_decay,
         "label_smoothing": args.label_smoothing,
         "max_grad_norm": args.max_grad_norm,
+        "balanced_sampling": args.balanced_sampling,
         "params": n_params,
         "pretrained": False,
     }

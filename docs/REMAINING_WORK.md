@@ -19,6 +19,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-probe-only-v2` | `semlex`, `val`, 20 clips/sign, `probe_only=true`, small model, dropout disabled inside probe | Probe passed: memorized 20 clips across 10 classes at 90% by epoch 17. No model release was created. |
 | `wave1-semlex-full-v11-lr3e4-small` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, small model, learning rate 0.0003, no label smoothing | 3.18% test accuracy, macro F1 0.00561. Probe passed first, but full training still failed to generalize; predictions concentrated on `what` and `no`. |
 | `wave1-semlex-full-v12-frame` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=frame`, learning rate 0.0005, no label smoothing | 4.55% test accuracy, macro F1 0.01601. Better macro F1 than v8/v11 but still far below v8 accuracy; do not replace bundled model. |
+| `wave1-semlex-full-v13-tcn` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=tcn`, learning rate 0.0005, no label smoothing | 6.82% test accuracy, macro F1 0.02255. Best macro F1 so far, but still below v8 accuracy; do not replace bundled model. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
@@ -52,11 +53,10 @@ Local training hardening now added and verified in the v10 run:
 
 ## Next training/diagnostic work
 
-Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The next useful work is generalization-focused diagnosis and stronger architecture/training changes:
+Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model is the best macro-F1 experiment so far, but still not pilot-quality. The next useful work is generalization-focused diagnosis and stronger architecture/training changes:
 
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
-- Try `model_size=tcn`, a from-scratch frame encoder plus temporal Conv1d stack.
-- Consider an even stronger temporal architecture if `tcn` also fails, while still training from scratch and avoiding pretrained pose/landmark models.
+- Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
 
 Example overfit probe command after a Sem-Lex manifest exists locally:
@@ -81,4 +81,4 @@ After training:
 
 ## Current blocker summary
 
-The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, and `wave1-semlex-full-v12-frame`) did not improve the bundled accuracy, so the next meaningful step is stronger architecture/training improvement on Sem-Lex.
+The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, `wave1-semlex-full-v12-frame`, and `wave1-semlex-full-v13-tcn`) did not improve the bundled accuracy, so the next meaningful step is stronger architecture/training improvement on Sem-Lex.
