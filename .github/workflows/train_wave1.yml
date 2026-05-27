@@ -85,6 +85,7 @@ on:
           - small
           - default
           - frame
+          - tcn
         default: small
       model_version:
         description: "Model version tag (also used for release tag)"

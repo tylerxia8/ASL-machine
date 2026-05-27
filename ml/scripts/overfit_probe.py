@@ -78,7 +78,7 @@ def main() -> int:
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--model-size", choices=["default", "small", "frame"], default="small")
+    parser.add_argument("--model-size", choices=["default", "small", "frame", "tcn"], default="small")
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--pass-threshold", type=float, default=0.95)

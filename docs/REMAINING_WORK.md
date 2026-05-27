@@ -55,7 +55,8 @@ Local training hardening now added and verified in the v10 run:
 Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The next useful work is generalization-focused diagnosis and stronger architecture/training changes:
 
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
-- Consider a stronger temporal architecture, while still training from scratch and avoiding pretrained pose/landmark models.
+- Try `model_size=tcn`, a from-scratch frame encoder plus temporal Conv1d stack.
+- Consider an even stronger temporal architecture if `tcn` also fails, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
 
 Example overfit probe command after a Sem-Lex manifest exists locally:

@@ -8,6 +8,8 @@ Two variants:
 - SignClipFrameCNN (~160K params): experimental frame-wise 2D CNN with temporal
   mean/delta pooling. Keeps the same browser input contract while testing
   whether a simpler temporal formulation generalizes better on Sem-Lex.
+- SignClipFrameTCN (~220K params): experimental frame-wise 2D CNN followed by
+  temporal Conv1d blocks, still trained from scratch.
 
 Both produce the same input/output contract: (N, 3, 24, 160, 160) → (N, num_classes).
 """
@@ -138,21 +140,76 @@ class SignClipFrameCNN(nn.Module):
         return self.head(torch.cat([mean_feat, delta_feat], dim=1))
 
 
+class SignClipFrameTCN(nn.Module):
+    """Frame-wise 2D encoder plus temporal Conv1d blocks."""
+
+    def __init__(self, num_classes: int, num_frames: int = 24, height: int = 160, width: int = 160):
+        super().__init__()
+        self.num_frames = num_frames
+        self.frame_encoder = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=5, padding=2),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 96, kernel_size=3, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(kernel_size=(height // 8, width // 8)),
+            nn.Flatten(),
+        )
+        self.temporal = nn.Sequential(
+            nn.Conv1d(96, 128, kernel_size=3, padding=1),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(128, 128, kernel_size=3, padding=2, dilation=2),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(128, 128, kernel_size=3, padding=4, dilation=4),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+        )
+        self.head = nn.Sequential(
+            nn.Linear(128 * 2, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.25),
+            nn.Linear(128, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, t, h, w = x.shape
+        frames = x.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
+        feat = self.frame_encoder(frames).reshape(b, t, -1).permute(0, 2, 1)
+        temporal = self.temporal(feat)
+        mean_feat = temporal.mean(dim=2)
+        max_feat = temporal.amax(dim=2)
+        return self.head(torch.cat([mean_feat, max_feat], dim=1))
+
+
 def build_model(num_classes: int, size: str = "default", **kwargs):
     """Build a from-scratch 3D CNN. Always kaiming_normal_ initialization, no
     checkpoint loading — Req 7 (no pretrained models).
 
-    size: "default" (3.57M params), "small" (~720K params), or "frame"
-    (~160K params experimental frame-wise model).
+    size: "default" (3.57M params), "small" (~720K params), "frame"
+    (~160K params), or "tcn" (~220K params).
     """
     if size == "small":
         model: nn.Module = SignClipCNN3D_Small(num_classes=num_classes, **kwargs)
     elif size == "frame":
         model = SignClipFrameCNN(num_classes=num_classes, **kwargs)
+    elif size == "tcn":
+        model = SignClipFrameTCN(num_classes=num_classes, **kwargs)
     elif size == "default":
         model = SignClipCNN3D(num_classes=num_classes, **kwargs)
     else:
-        raise ValueError(f"Unknown model size {size!r}; must be 'default', 'small', or 'frame'")
+        raise ValueError(f"Unknown model size {size!r}; must be 'default', 'small', 'frame', or 'tcn'")
     for m in model.modules():
         if isinstance(m, (nn.Conv2d, nn.Conv3d, nn.Linear)):
             nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
