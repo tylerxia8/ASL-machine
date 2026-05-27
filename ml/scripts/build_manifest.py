@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import random
+from collections import Counter, defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -18,6 +19,46 @@ def load_wave1_ids() -> set[str]:
         for row in csv.DictReader(f):
             ids.add(row["sign_id"])
     return ids
+
+
+def choose_test_signers(clips: list[dict], target_count: int) -> set[str]:
+    """Pick signer-disjoint test signers while maximizing sign coverage.
+
+    A sorted-first signer choice is deterministic but brittle: on Sem-Lex it can
+    hold out signers who collectively cover only a narrow slice of the Wave 1
+    vocabulary. This greedy selector keeps the same signer-disjoint contract
+    while preferring signers that add held-out support for signs not yet covered.
+    """
+    unique_signers = sorted({c["signer_id"] for c in clips})
+    if target_count <= 0 or not unique_signers:
+        return set()
+
+    by_signer: dict[str, Counter[str]] = defaultdict(Counter)
+    for clip in clips:
+        by_signer[clip["signer_id"]][clip["sign_id"]] += 1
+
+    selected: set[str] = set()
+    covered_signs: set[str] = set()
+    if "signer_b" in unique_signers:
+        selected.add("signer_b")
+        covered_signs.update(by_signer["signer_b"])
+
+    while len(selected) < target_count:
+        candidates = [s for s in unique_signers if s not in selected and s != "signer_a"]
+        if not candidates:
+            break
+
+        def score(signer: str) -> tuple[int, int, int, str]:
+            counts = by_signer[signer]
+            new_signs = set(counts) - covered_signs
+            new_clip_count = sum(counts[sign] for sign in new_signs)
+            total_clip_count = sum(counts.values())
+            return (len(new_signs), new_clip_count, total_clip_count, signer)
+
+        best = max(candidates, key=score)
+        selected.add(best)
+        covered_signs.update(by_signer[best])
+    return selected
 
 
 def main():
@@ -61,17 +102,7 @@ def main():
         # Always include `signer_b` as test if present (legacy 2-signer convention).
         unique_signers = sorted({c["signer_id"] for c in clips})
         n_test = max(1, int(round(len(unique_signers) * 0.15))) if len(unique_signers) > 1 else 0
-        test_signers: set[str] = set()
-        if "signer_b" in unique_signers:
-            test_signers.add("signer_b")
-        # Fill remaining test slots in deterministic order, avoiding signer_a
-        # (we want as many train/val signers as possible).
-        for s in unique_signers:
-            if len(test_signers) >= n_test:
-                break
-            if s == "signer_a" or s in test_signers:
-                continue
-            test_signers.add(s)
+        test_signers = choose_test_signers(clips, n_test)
 
         if not test_signers:
             # Only 1 unique signer (or the only available holdouts are excluded).
@@ -109,6 +140,11 @@ def main():
                 else:
                     split = "train" if random.random() < 0.85 else "val"
                 manifest_clips.append({**c, "split": split})
+            test_signs = {c["sign_id"] for c in manifest_clips if c["split"] == "test"}
+            missing_test = sorted(sign_ids - test_signs)
+            if missing_test:
+                print(f"WARNING: {len(missing_test)} sign(s) have zero signer-disjoint "
+                      f"test support: {missing_test}")
     else:
         by_sign = {}
         for c in clips:
