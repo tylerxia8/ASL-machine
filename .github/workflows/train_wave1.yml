@@ -238,6 +238,26 @@ jobs:
             --manifest ml/data/manifest.json \
             --out-json ml/exports/manifest_report.json
 
+      - name: Visual QA contact sheets
+        run: |
+          python ml/scripts/make_contact_sheets.py \
+            --manifest ml/data/manifest.json \
+            --video-dir ml/data/incoming \
+            --out-dir ml/reports/contact_sheets \
+            --split test \
+            --max-signs 25 \
+            --clips-per-sign 2 \
+            --frames-per-clip 6
+
+      - name: Upload diagnostic artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-${{ inputs.model_version }}
+          path: |
+            ml/exports/manifest_report.json
+            ml/reports/contact_sheets/*.jpg
+          retention-days: 30
+
       - name: Tiny memorization probe
         if: inputs.run_overfit_probe && (inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both')
         env:
@@ -299,6 +319,7 @@ jobs:
             ml/exports/model_meta.json
             ml/exports/eval_metrics.json
             ml/exports/manifest_report.json
+            ml/reports/contact_sheets/*.jpg
             docs/VALIDATION_REPORT.md
           retention-days: 30
 
@@ -324,6 +345,7 @@ jobs:
             - `model_meta.json` — drop into `apps/web/public/models/`
             - `eval_metrics.json` — raw classification report + accuracy
             - `manifest_report.json` — split/sign/signer coverage diagnostics
+            - `contact_sheet_*.jpg` — visual QA sheets for preprocessing/crop review
             - `VALIDATION_REPORT.md` — full report with auto-metrics block
 
             See `docs/VALIDATION_REPORT.md` in the repo for the narrative.
@@ -333,4 +355,5 @@ jobs:
             ml/exports/model_meta.json
             ml/exports/eval_metrics.json
             ml/exports/manifest_report.json
+            ml/reports/contact_sheets/*.jpg
             docs/VALIDATION_REPORT.md

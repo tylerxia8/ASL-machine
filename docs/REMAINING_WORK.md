@@ -79,6 +79,7 @@ Local training hardening now added and verified in the v10 run:
 - The training workflow also supports `probe_only=true`, which stops after fetch/decode/manifest/probe and skips train/export/release
 - The training workflow exposes trainer hyperparameters (`learning_rate`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
 - `ml/scripts/manifest_report.py` reports split/sign/signer coverage before training and is uploaded as `manifest_report.json` with future releases
+- `ml/scripts/make_contact_sheets.py` renders visual QA sheets from imported clips, and from raw staged videos when available, so the next Sem-Lex run can inspect whether center-cropping removes hands/signing space
 - `ml/scripts/build_manifest.py` now chooses signer-disjoint test signers by greedy Wave 1 sign coverage instead of sorted signer ID, reducing accidental zero-test-support signs
 - After selecting held-out test signers, `build_manifest.py` also assigns validation clips per sign where at least two non-test clips remain, reducing accidental zero-val-support signs
 
@@ -90,6 +91,20 @@ Do not spend more runs on the same settings. The v10 hardened run lowered confid
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
 - Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
+
+Example contact-sheet command after a manifest exists locally:
+
+```powershell
+.\ml\.venv\Scripts\python.exe ml/scripts/make_contact_sheets.py `
+  --manifest ml/data/manifest.json `
+  --video-dir ml/data/incoming `
+  --split test `
+  --signs what,where,please,sorry,one,two,three,four,five `
+  --clips-per-sign 3 `
+  --frames-per-clip 6
+```
+
+Future Train Wave 1 workflow runs also upload `contact_sheet_test.jpg` in the diagnostics artifact and release assets.
 
 Example overfit probe command after a Sem-Lex manifest exists locally:
 

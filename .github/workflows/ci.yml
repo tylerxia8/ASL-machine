@@ -63,3 +63,6 @@ jobs:
       # Splice logic for validation report
       - name: Smoke-test eval splice
         run: python ml/scripts/test_eval_splice.py
+      # Visual QA contact sheet generation
+      - name: Smoke-test contact sheets
+        run: python ml/scripts/test_contact_sheets.py
