@@ -48,6 +48,14 @@ A later probe-only workflow (`26536422324`) verified the manifest report step on
 - Zero-test-support signs in that restricted diagnostic split: 13 / 24
 - Overfit probe: PASS at 90% memorization accuracy
 
+After changing the signer-disjoint selection to maximize sign coverage and balancing validation per sign, probe-only workflow `26538435250` on the same restricted setup showed:
+
+- Manifest clips: 322
+- Signer-disjoint test split: OK
+- Zero-test-support signs: 0 / 24
+- Zero-val-support signs: 1 / 24 (`four`, with only one non-test clip)
+- Overfit probe: PASS at 95% memorization accuracy
+
 Local training hardening now added and verified in the v10 run:
 
 - `ml/train.py` uses light label smoothing by default (`--label-smoothing 0.05`)
