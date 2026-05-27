@@ -50,11 +50,13 @@ Local training hardening now added and verified in the v10 run:
 - `.github/workflows/train_wave1.yml` runs the overfit probe by default before Sem-Lex-backed full training; set `run_overfit_probe=false` only when intentionally bypassing that diagnostic
 - The training workflow also supports `probe_only=true`, which stops after fetch/decode/manifest/probe and skips train/export/release
 - The training workflow exposes trainer hyperparameters (`learning_rate`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
+- `ml/scripts/manifest_report.py` reports split/sign/signer coverage before training and is uploaded as `manifest_report.json` with future releases
 
 ## Next training/diagnostic work
 
 Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model is the best macro-F1 experiment so far, but still not pilot-quality. The next useful work is generalization-focused diagnosis and stronger architecture/training changes:
 
+- Inspect `manifest_report.json` in the next release to identify signs with zero/low held-out support and signer imbalance before interpreting model accuracy.
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
 - Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.

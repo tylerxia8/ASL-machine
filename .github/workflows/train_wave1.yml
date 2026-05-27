@@ -232,6 +232,12 @@ jobs:
               print(f'  {s:20s} {per_sign[s]}')
           "
 
+      - name: Manifest coverage report
+        run: |
+          python ml/scripts/manifest_report.py \
+            --manifest ml/data/manifest.json \
+            --out-json ml/exports/manifest_report.json
+
       - name: Tiny memorization probe
         if: inputs.run_overfit_probe && (inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both')
         env:
@@ -292,6 +298,7 @@ jobs:
             ml/exports/labels.json
             ml/exports/model_meta.json
             ml/exports/eval_metrics.json
+            ml/exports/manifest_report.json
             docs/VALIDATION_REPORT.md
           retention-days: 30
 
@@ -316,6 +323,7 @@ jobs:
             - `labels.json` — drop into `apps/web/public/models/`
             - `model_meta.json` — drop into `apps/web/public/models/`
             - `eval_metrics.json` — raw classification report + accuracy
+            - `manifest_report.json` — split/sign/signer coverage diagnostics
             - `VALIDATION_REPORT.md` — full report with auto-metrics block
 
             See `docs/VALIDATION_REPORT.md` in the repo for the narrative.
@@ -324,4 +332,5 @@ jobs:
             ml/exports/labels.json
             ml/exports/model_meta.json
             ml/exports/eval_metrics.json
+            ml/exports/manifest_report.json
             docs/VALIDATION_REPORT.md
