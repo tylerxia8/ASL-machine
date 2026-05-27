@@ -125,7 +125,11 @@ def main():
             out_dir.mkdir(parents=True, exist_ok=True)
             existing = len(list(out_dir.glob("*.npz")))
             out_path = out_dir / f"clip_{existing:04d}.npz"
-            np.savez_compressed(out_path, frames=frames)
+            np.savez_compressed(
+                out_path,
+                frames=frames,
+                source_path=str(path.relative_to(ROOT)).replace("\\", "/"),
+            )
             imported += 1
             print(f"Imported {path.name} -> {out_path.relative_to(ROOT)}")
         except Exception as e:

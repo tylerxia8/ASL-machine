@@ -122,6 +122,24 @@ def _clip_num_from_npz(path: Path) -> str | None:
     return f"{int(m.group(1)):04d}"
 
 
+def _source_video_from_npz(path: Path) -> Path | None:
+    try:
+        with np.load(path) as data:
+            if "source_path" not in data:
+                return None
+            raw_value = data["source_path"]
+    except Exception:
+        return None
+
+    source = str(raw_value.item() if hasattr(raw_value, "item") else raw_value)
+    if not source:
+        return None
+    source_path = Path(source)
+    if not source_path.is_absolute():
+        source_path = ROOT / source_path
+    return source_path if source_path.exists() else None
+
+
 def _select_rows(manifest: dict, split: str, signs: set[str] | None, max_signs: int,
                  clips_per_sign: int) -> list[dict]:
     by_sign: dict[str, list[dict]] = defaultdict(list)
@@ -185,15 +203,17 @@ def render_sheet(rows: list[dict], out_path: Path, video_dir: Path, frames_per_c
         processed = load_clip(clip_path)
 
         raw_images = None
-        clip_num = _clip_num_from_npz(clip_path)
-        if clip_num:
-            raw_path = raw_index.get((row["sign_id"], row.get("signer_id", ""), clip_num))
-            if raw_path:
-                try:
-                    raw_images = _read_video_frames(raw_path, frames_per_clip)
-                    raw_matches += 1
-                except Exception as exc:
-                    print(f"WARNING: could not read raw video {raw_path}: {exc}", file=sys.stderr)
+        raw_path = _source_video_from_npz(clip_path)
+        if raw_path is None:
+            clip_num = _clip_num_from_npz(clip_path)
+            if clip_num:
+                raw_path = raw_index.get((row["sign_id"], row.get("signer_id", ""), clip_num))
+        if raw_path:
+            try:
+                raw_images = _read_video_frames(raw_path, frames_per_clip)
+                raw_matches += 1
+            except Exception as exc:
+                print(f"WARNING: could not read raw video {raw_path}: {exc}", file=sys.stderr)
         _draw_clip_cell(draw, sheet, PAD, y, row, processed, raw_images, frames_per_clip)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

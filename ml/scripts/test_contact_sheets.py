@@ -21,6 +21,23 @@ def _clip(seed: int) -> np.ndarray:
     return frames
 
 
+def _write_video(path: Path, frames: np.ndarray) -> None:
+    import cv2
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    writer = cv2.VideoWriter(
+        str(path),
+        cv2.VideoWriter_fourcc(*"MJPG"),
+        12,
+        (frames.shape[2], frames.shape[1]),
+    )
+    assert writer.isOpened()
+    for frame in frames:
+        arr = np.clip(frame * 255, 0, 255).astype(np.uint8)
+        writer.write(cv2.cvtColor(arr, cv2.COLOR_RGB2BGR))
+    writer.release()
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
@@ -30,7 +47,10 @@ def main() -> None:
         for i, sign_id in enumerate(("hello", "where")):
             path = clips_dir / sign_id / "signer_test" / "clip_0000.npz"
             path.parent.mkdir(parents=True, exist_ok=True)
-            np.savez_compressed(path, frames=_clip(i))
+            frames = _clip(i)
+            source = root / "incoming" / f"{sign_id}_signer_test_0000.avi"
+            _write_video(source, frames)
+            np.savez_compressed(path, frames=frames, source_path=str(source))
             rows.append(
                 {
                     "path": str(path),
@@ -45,7 +65,7 @@ def main() -> None:
         out_path = out_dir / "sheet.jpg"
         count, raw_matches = render_sheet(rows, out_path, root / "incoming", frames_per_clip=4)
         assert count == 2
-        assert raw_matches == 0
+        assert raw_matches == 2
         assert out_path.exists()
         with Image.open(out_path) as img:
             assert img.width > 0
