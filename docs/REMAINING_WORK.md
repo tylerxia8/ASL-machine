@@ -35,6 +35,7 @@ Local training hardening now added and verified in the v10 run:
 - `ml/eval.py` now exports per-clip predictions plus 0.1-wide confidence bins
 - `ml/scripts/overfit_probe.py` can test whether the current model can memorize a tiny per-class subset before launching another full training job
 - `.github/workflows/train_wave1.yml` runs the overfit probe by default before Sem-Lex-backed full training; set `run_overfit_probe=false` only when intentionally bypassing that diagnostic
+- The training workflow also supports `probe_only=true`, which stops after fetch/decode/manifest/probe and skips train/export/release
 
 ## Next training/diagnostic work
 

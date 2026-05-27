@@ -73,6 +73,10 @@ on:
         description: "Before full training, verify the model can memorize a tiny subset"
         type: boolean
         default: true
+      probe_only:
+        description: "Stop after the manifest summary and memorization probe; do not train/export/release"
+        type: boolean
+        default: false
 
 jobs:
   train:
@@ -222,6 +226,7 @@ jobs:
             --pass-threshold 0.90
 
       - name: Train
+        if: ${{ !inputs.probe_only }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -232,6 +237,7 @@ jobs:
             --model-size ${{ inputs.model_size }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
+        if: ${{ !inputs.probe_only }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -240,6 +246,7 @@ jobs:
             --manifest ml/data/manifest.json
 
       - name: Export ONNX
+        if: ${{ !inputs.probe_only }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -248,6 +255,7 @@ jobs:
           ls -lh ml/exports/
 
       - name: Upload artifacts (always)
+        if: ${{ !inputs.probe_only }}
         uses: actions/upload-artifact@v4
         with:
           name: model-${{ inputs.model_version }}
@@ -260,6 +268,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
+        if: ${{ !inputs.probe_only }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.model_version }}
