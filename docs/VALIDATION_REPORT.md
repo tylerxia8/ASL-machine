@@ -168,7 +168,7 @@ If the model is overconfident on errors (a common failure mode of from-scratch C
 Concrete observations from `wave1-semlex-full-v8`:
 
 - **Current model is not pilot-quality.** Test accuracy is 14.09% with macro F1 0.01. The model collapses heavily toward `where`, so it is useful for end-to-end app integration but not reliable learner assessment.
-- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy; `wave1-semlex-full-v10-hardened` dropped to 4.55% accuracy with macro F1 0.01141. The next meaningful lever is deeper diagnosis and architecture/training improvement on the Sem-Lex subset, not another identical run.
+- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy; `wave1-semlex-full-v10-hardened` dropped to 4.55% accuracy with macro F1 0.01141; `wave1-semlex-full-v11-lr3e4-small` dropped to 3.18% accuracy with macro F1 0.00561. The next meaningful lever is deeper diagnosis and architecture/training improvement on the Sem-Lex subset, not another whole-frame CNN run with minor hyperparameter changes.
 - **`five` has zero test support in this release.** Accuracy for that class is unknown until the evaluation split includes held-out clips.
 - **Highest observed confusion pattern:** many classes are predicted as `where` (`who`, `help`, `friend`, `nice`, `deaf`, `water`, `eat`, `what`, `name`, `sleep`).
 

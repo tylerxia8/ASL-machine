@@ -2,7 +2,7 @@
 
 Maps the rubric's 15 requirements and 7 final deliverables to specific artifacts in this repo. Reviewers can use this as the entry-point document; each link points at the file that satisfies the line item.
 
-Current readiness caveat: the bundled/best-available model is `wave1-semlex-full-v8`. It satisfies the technical deliverable of a trained, from-scratch ONNX model, but validation is not yet pilot-quality: signer-disjoint test accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up releases `wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, and `wave1-semlex-full-v10-hardened` did not improve the bundled accuracy. Treat the current model as an end-to-end integration/demo artifact until additional diagnosis, data work, and retraining improve accuracy.
+Current readiness caveat: the bundled/best-available model is `wave1-semlex-full-v8`. It satisfies the technical deliverable of a trained, from-scratch ONNX model, but validation is not yet pilot-quality: signer-disjoint test accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up releases `wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, and `wave1-semlex-full-v11-lr3e4-small` did not improve the bundled accuracy. Treat the current model as an end-to-end integration/demo artifact until additional diagnosis, data work, and retraining improve accuracy.
 
 Project repo: https://github.com/tylerxia8/ASL-machine
 
@@ -11,7 +11,7 @@ Project repo: https://github.com/tylerxia8/ASL-machine
 | # | Deliverable | Location |
 |---|---|---|
 | 1 | Working browser-based ASL learning application | [`apps/web/`](../apps/web/) — Vite + React + TypeScript. Lives behind `/lobby`, `/practice`, `/progress`, `/capture`, `/dry-run`, `/login`. |
-| 2 | Trained sign recognition model | Published as a GitHub Release: https://github.com/tylerxia8/ASL-machine/releases (look for the latest `wave1-*` tag). Drop `model.onnx`, `labels.json`, `model_meta.json` into `apps/web/public/models/`. |
+| 2 | Trained sign recognition model | Published as a GitHub Release: https://github.com/tylerxia8/ASL-machine/releases. Use `wave1-semlex-full-v8` for the current bundled/best-by-accuracy artifact; newer `wave1-*` tags are experiments unless docs say they replace v8. Drop `model.onnx`, `labels.json`, `model_meta.json` into `apps/web/public/models/`. |
 | 3 | Dataset & training process docs (no-pretrained evidence) | [`docs/DATASET_AND_TRAINING.md`](DATASET_AND_TRAINING.md) + [`docs/NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md) |
 | 4 | Validation report with accuracy + conditions + limitations | [`docs/VALIDATION_REPORT.md`](VALIDATION_REPORT.md) (narrative hand-written; metrics block populated by `ml/eval.py`) |
 | 5 | Learner accounts + progress tracking | [`apps/api/`](../apps/api/) (FastAPI) + [`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql) |
