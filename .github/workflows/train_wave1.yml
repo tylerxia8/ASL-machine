@@ -79,11 +79,12 @@ on:
         type: number
         default: 4
       model_size:
-        description: "Model capacity. 'small' (~720K params) for <2k clips; 'default' (~3.57M) otherwise"
+        description: "Model capacity/architecture"
         type: choice
         options:
           - small
           - default
+          - frame
         default: small
       model_version:
         description: "Model version tag (also used for release tag)"

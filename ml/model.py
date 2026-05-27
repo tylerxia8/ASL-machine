@@ -5,6 +5,9 @@ Two variants:
 - SignClipCNN3D_Small (~720K params): roughly 5× smaller, for low-data regimes
   (<2k clips) where the default variant mode-collapses. Picked via the
   `--model-size {default|small}` arg to ml/train.py.
+- SignClipFrameCNN (~160K params): experimental frame-wise 2D CNN with temporal
+  mean/delta pooling. Keeps the same browser input contract while testing
+  whether a simpler temporal formulation generalizes better on Sem-Lex.
 
 Both produce the same input/output contract: (N, 3, 24, 160, 160) → (N, num_classes).
 """
@@ -94,20 +97,64 @@ class SignClipCNN3D_Small(nn.Module):
         return self.head(self.stem(x))
 
 
+class SignClipFrameCNN(nn.Module):
+    """Frame-wise 2D CNN with temporal pooling for low-data experiments."""
+
+    def __init__(self, num_classes: int, num_frames: int = 24, height: int = 160, width: int = 160):
+        super().__init__()
+        self.num_frames = num_frames
+        self.frame_encoder = nn.Sequential(
+            nn.Conv2d(3, 16, kernel_size=5, padding=2),
+            nn.BatchNorm2d(16),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Conv2d(64, 96, kernel_size=3, padding=1),
+            nn.BatchNorm2d(96),
+            nn.ReLU(inplace=True),
+            nn.AvgPool2d(kernel_size=(height // 8, width // 8)),
+            nn.Flatten(),
+        )
+        self.head = nn.Sequential(
+            nn.Linear(96 * 2, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.25),
+            nn.Linear(128, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, t, h, w = x.shape
+        frames = x.permute(0, 2, 1, 3, 4).reshape(b * t, c, h, w)
+        feat = self.frame_encoder(frames).reshape(b, t, -1)
+        mean_feat = feat.mean(dim=1)
+        delta_feat = torch.abs(feat[:, 1:, :] - feat[:, :-1, :]).mean(dim=1)
+        return self.head(torch.cat([mean_feat, delta_feat], dim=1))
+
+
 def build_model(num_classes: int, size: str = "default", **kwargs):
     """Build a from-scratch 3D CNN. Always kaiming_normal_ initialization, no
     checkpoint loading — Req 7 (no pretrained models).
 
-    size: "default" (3.57M params) or "small" (~720K params, low-data regime).
+    size: "default" (3.57M params), "small" (~720K params), or "frame"
+    (~160K params experimental frame-wise model).
     """
     if size == "small":
         model: nn.Module = SignClipCNN3D_Small(num_classes=num_classes, **kwargs)
+    elif size == "frame":
+        model = SignClipFrameCNN(num_classes=num_classes, **kwargs)
     elif size == "default":
         model = SignClipCNN3D(num_classes=num_classes, **kwargs)
     else:
-        raise ValueError(f"Unknown model size {size!r}; must be 'default' or 'small'")
+        raise ValueError(f"Unknown model size {size!r}; must be 'default', 'small', or 'frame'")
     for m in model.modules():
-        if isinstance(m, (nn.Conv3d, nn.Linear)):
+        if isinstance(m, (nn.Conv2d, nn.Conv3d, nn.Linear)):
             nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             if m.bias is not None:
                 nn.init.zeros_(m.bias)

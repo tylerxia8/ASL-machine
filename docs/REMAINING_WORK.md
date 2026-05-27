@@ -54,8 +54,8 @@ Local training hardening now added and verified in the v10 run:
 Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The next useful work is generalization-focused diagnosis and architecture/training changes:
 
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
-- Try a different architecture/training formulation rather than another whole-frame CNN run with minor hyperparameter changes.
-- Consider a stronger temporal architecture than the current whole-frame 3D CNN, while still training from scratch and avoiding pretrained pose/landmark models.
+- Try the new `model_size=frame` architecture, a from-scratch frame-wise 2D CNN with temporal mean/delta pooling, before doing more whole-frame 3D CNN runs.
+- Consider a stronger temporal architecture if `frame` also fails, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
 
 Example overfit probe command after a Sem-Lex manifest exists locally:
