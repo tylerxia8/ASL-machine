@@ -220,9 +220,10 @@ jobs:
             --split train \
             --samples-per-class 2 \
             --max-classes 10 \
-            --epochs 20 \
+            --epochs 40 \
             --batch-size 8 \
             --model-size small \
+            --disable-dropout \
             --pass-threshold 0.90
 
       - name: Train

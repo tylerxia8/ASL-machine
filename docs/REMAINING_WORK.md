@@ -53,10 +53,11 @@ Example overfit probe command after a Sem-Lex manifest exists locally:
 .\ml\.venv\Scripts\python.exe ml/scripts/overfit_probe.py `
   --manifest ml/data/manifest.json `
   --split train `
-  --samples-per-class 3 `
+  --samples-per-class 2 `
   --max-classes 10 `
-  --epochs 20 `
-  --model-size small
+  --epochs 40 `
+  --model-size small `
+  --disable-dropout
 ```
 
 After training:

@@ -27,6 +27,12 @@ from dataset import SignClipDataset  # noqa: E402
 from model import build_model  # noqa: E402
 
 
+def _disable_dropout(model: nn.Module) -> None:
+    for module in model.modules():
+        if isinstance(module, (nn.Dropout, nn.Dropout2d, nn.Dropout3d)):
+            module.p = 0.0
+
+
 def _choose_subset(manifest: dict, split: str, samples_per_class: int,
                    max_classes: int | None) -> tuple[list[str], list[int]]:
     rows = [row for row in manifest["clips"] if row["split"] == split]
@@ -76,9 +82,13 @@ def main() -> int:
     parser.add_argument("--label-smoothing", type=float, default=0.0)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--pass-threshold", type=float, default=0.95)
+    parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--disable-dropout", action="store_true",
+                        help="Set Dropout probabilities to 0 for a purer memorization check.")
     parser.add_argument("--no-fail", action="store_true",
                         help="Always exit 0; useful when recording diagnostics in CI logs.")
     args = parser.parse_args()
+    torch.manual_seed(args.seed)
 
     manifest_path = Path(args.manifest)
     with open(manifest_path, encoding="utf-8") as f:
@@ -95,6 +105,8 @@ def main() -> int:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = build_model(num_classes=len(sign_ids), size=args.model_size).to(device)
+    if args.disable_dropout:
+        _disable_dropout(model)
     criterion = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing)
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
 
