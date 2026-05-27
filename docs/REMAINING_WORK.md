@@ -16,6 +16,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-full-v9` | `both`, `train,val,test`, 100 clips/sign, 30 epochs, default model | 14.09% test accuracy, macro F1 0.00988. Did not improve over v8. |
 | `wave1-semlex-full-v9-small` | `both`, `train,val,test`, 100 clips/sign, 15 epochs, small model | 8.18% test accuracy, macro F1 0.00610. Worse than v8/v9. |
 | `wave1-semlex-full-v10-hardened` | `semlex`, `train,val,test`, 100 clips/sign, 20 epochs, default model, label smoothing + grad clipping | 4.55% test accuracy, macro F1 0.01141. Confidence bins were produced, but accuracy worsened; keep v8 as bundled best-by-accuracy model. |
+| `wave1-semlex-probe-only-v2` | `semlex`, `val`, 20 clips/sign, `probe_only=true`, small model, dropout disabled inside probe | Probe passed: memorized 20 clips across 10 classes at 90% by epoch 17. No model release was created. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
@@ -26,6 +27,15 @@ The v9/v10 logs show:
 - Classes with data: 25 / 25
 - Train class counts: min 2, max 82, mean 40.4, zero-count classes 0
 - Repeated `MODE-COLLAPSE` warnings: validation predictions collapse to 1-2 classes
+
+The probe-only run (`26516283720`) used the Sem-Lex `val` split as a smaller diagnostic:
+
+- Staged videos: 323
+- Manifest clips: 322
+- Split counts: 255 train / 53 val / 14 test
+- Classes with data: 24 / 24 for that restricted split
+- Overfit probe: 20 clips, 10 classes, 2 clips/class, small model, dropout disabled
+- Result: PASS at 90% memorization accuracy by epoch 17
 
 Local training hardening now added and verified in the v10 run:
 
@@ -39,10 +49,9 @@ Local training hardening now added and verified in the v10 run:
 
 ## Next training/diagnostic work
 
-Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The next useful work is diagnosis and architecture/training changes:
+Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The probe-only run confirms the stack can memorize a tiny Sem-Lex subset, so the next useful work is generalization-focused diagnosis and architecture/training changes:
 
-- Run the tiny per-class overfit check: can the model memorize 2-5 clips per sign?
-- Inspect label/video alignment for classes that collapse or have near-zero recall.
+- Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
 - Try lower learning rates and class-balanced sampling/loss on Sem-Lex only.
 - Consider a stronger temporal architecture than the current whole-frame 3D CNN, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
