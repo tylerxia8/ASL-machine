@@ -69,6 +69,10 @@ on:
         description: "Model version tag (also used for release tag)"
         type: string
         default: wave1-ci-v1
+      run_overfit_probe:
+        description: "Before full training, verify the model can memorize a tiny subset"
+        type: boolean
+        default: true
 
 jobs:
   train:
@@ -201,6 +205,21 @@ jobs:
           for s in sorted(per_sign):
               print(f'  {s:20s} {per_sign[s]}')
           "
+
+      - name: Tiny memorization probe
+        if: inputs.run_overfit_probe && (inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both')
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/scripts/overfit_probe.py \
+            --manifest ml/data/manifest.json \
+            --split train \
+            --samples-per-class 2 \
+            --max-classes 10 \
+            --epochs 20 \
+            --batch-size 8 \
+            --model-size small \
+            --pass-threshold 0.90
 
       - name: Train
         env:
