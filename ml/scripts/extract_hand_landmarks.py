@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import urllib.request
 from pathlib import Path
 
 import cv2
@@ -19,6 +20,12 @@ sys.path.insert(0, str(ROOT / "ml"))
 
 from clip_io import load_clip  # noqa: E402
 from landmark_dataset import HAND_FEATURES, NUM_FRAMES, feature_path_for_clip  # noqa: E402
+
+HAND_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/"
+    "hand_landmarker/float16/1/hand_landmarker.task"
+)
+DEFAULT_MODEL_PATH = ROOT / "ml" / "data" / "mediapipe" / "hand_landmarker.task"
 
 
 def _sample_indices(length: int, target: int) -> np.ndarray:
@@ -59,8 +66,14 @@ def _clip_source_path(clip_path: Path) -> Path | None:
         return None
 
 
+def _landmark_list(landmarks) -> list:
+    if hasattr(landmarks, "landmark"):
+        return list(landmarks.landmark)
+    return list(landmarks)
+
+
 def _hand_vector(landmarks) -> np.ndarray:
-    arr = np.array([[lm.x, lm.y, lm.z] for lm in landmarks.landmark], dtype=np.float32)
+    arr = np.array([[lm.x, lm.y, lm.z] for lm in _landmark_list(landmarks)], dtype=np.float32)
     wrist = arr[0].copy()
     rel = arr - wrist
     return np.concatenate([wrist, rel.reshape(-1)], axis=0)
@@ -68,15 +81,22 @@ def _hand_vector(landmarks) -> np.ndarray:
 
 def _features_for_result(result) -> np.ndarray:
     out = np.zeros((HAND_FEATURES,), dtype=np.float32)
-    if not result.multi_hand_landmarks:
+    hand_landmarks = getattr(result, "multi_hand_landmarks", None)
+    handedness = getattr(result, "multi_handedness", None)
+    if hand_landmarks is None:
+        hand_landmarks = getattr(result, "hand_landmarks", None)
+        handedness = getattr(result, "handedness", None)
+    if not hand_landmarks:
         return out
 
     slots: dict[str, np.ndarray] = {}
-    for idx, hand_landmarks in enumerate(result.multi_hand_landmarks):
+    for idx, landmarks in enumerate(hand_landmarks):
         label = ""
-        if result.multi_handedness and idx < len(result.multi_handedness):
-            label = result.multi_handedness[idx].classification[0].label.lower()
-        vec = _hand_vector(hand_landmarks)
+        if handedness and idx < len(handedness):
+            first = handedness[idx][0] if isinstance(handedness[idx], list) else handedness[idx].classification[0]
+            label = getattr(first, "category_name", None) or getattr(first, "label", "")
+            label = label.lower()
+        vec = _hand_vector(landmarks)
         if label.startswith("left"):
             slots["left"] = vec
         elif label.startswith("right"):
@@ -93,20 +113,36 @@ def _features_for_result(result) -> np.ndarray:
     return out
 
 
-def extract_features(frames: list[np.ndarray], min_detection_confidence: float) -> np.ndarray:
-    import mediapipe as mp
+def _ensure_model(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists() or path.stat().st_size == 0:
+        print(f"Downloading MediaPipe hand landmarker model -> {path}")
+        urllib.request.urlretrieve(HAND_MODEL_URL, path)
+    return path
 
-    features = np.zeros((NUM_FRAMES, HAND_FEATURES), dtype=np.float32)
-    with mp.solutions.hands.Hands(
-        static_image_mode=False,
-        max_num_hands=2,
-        model_complexity=1,
+
+def create_landmarker(model_path: Path, min_detection_confidence: float):
+    import mediapipe as mp
+    from mediapipe.tasks import python
+    from mediapipe.tasks.python import vision
+
+    options = vision.HandLandmarkerOptions(
+        base_options=python.BaseOptions(model_asset_path=str(model_path)),
+        running_mode=vision.RunningMode.VIDEO,
+        num_hands=2,
         min_detection_confidence=min_detection_confidence,
+        min_hand_presence_confidence=0.35,
         min_tracking_confidence=0.40,
-    ) as hands:
-        for i, frame in enumerate(frames):
-            result = hands.process(frame)
-            features[i] = _features_for_result(result)
+    )
+    return mp, vision.HandLandmarker.create_from_options(options)
+
+
+def extract_features(frames: list[np.ndarray], mp, landmarker) -> np.ndarray:
+    features = np.zeros((NUM_FRAMES, HAND_FEATURES), dtype=np.float32)
+    for i, frame in enumerate(frames):
+        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame))
+        result = landmarker.detect_for_video(image, i * 1000 // 12)
+        features[i] = _features_for_result(result)
     return features
 
 
@@ -116,6 +152,7 @@ def main() -> int:
     parser.add_argument("--out-dir", default=str(ROOT / "ml" / "data" / "hand_landmarks"))
     parser.add_argument("--prefer-source-video", action="store_true", default=True)
     parser.add_argument("--min-detection-confidence", type=float, default=0.35)
+    parser.add_argument("--hand-model", default=str(DEFAULT_MODEL_PATH))
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -127,33 +164,36 @@ def main() -> int:
     failures: list[tuple[str, str]] = []
     detected_frames = 0
     total_frames = 0
-    for row in tqdm(manifest["clips"], desc="Extract hand landmarks"):
-        clip_path = ROOT / row["path"]
-        out_path = feature_path_for_clip(row["path"], out_dir)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            source = _clip_source_path(clip_path) if args.prefer_source_video else None
-            if source is not None and source.exists():
-                frames = _load_video_frames(source, NUM_FRAMES)
-                source_kind = "source_video"
-            else:
-                frames = _load_clip_frames(clip_path, NUM_FRAMES)
-                source_kind = "imported_clip"
-            features = extract_features(frames, args.min_detection_confidence)
-            present = np.abs(features).sum(axis=1) > 0
-            detected_frames += int(present.sum())
-            total_frames += int(features.shape[0])
-            np.savez_compressed(
-                out_path,
-                features=features,
-                sign_id=row["sign_id"],
-                signer_id=row["signer_id"],
-                split=row["split"],
-                source_kind=source_kind,
-                detected_frame_count=int(present.sum()),
-            )
-        except Exception as exc:
-            failures.append((row["path"], str(exc)))
+    model_path = _ensure_model(Path(args.hand_model))
+    mp, landmarker = create_landmarker(model_path, args.min_detection_confidence)
+    with landmarker:
+        for row in tqdm(manifest["clips"], desc="Extract hand landmarks"):
+            clip_path = ROOT / row["path"]
+            out_path = feature_path_for_clip(row["path"], out_dir)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                source = _clip_source_path(clip_path) if args.prefer_source_video else None
+                if source is not None and source.exists():
+                    frames = _load_video_frames(source, NUM_FRAMES)
+                    source_kind = "source_video"
+                else:
+                    frames = _load_clip_frames(clip_path, NUM_FRAMES)
+                    source_kind = "imported_clip"
+                features = extract_features(frames, mp, landmarker)
+                present = np.abs(features).sum(axis=1) > 0
+                detected_frames += int(present.sum())
+                total_frames += int(features.shape[0])
+                np.savez_compressed(
+                    out_path,
+                    features=features,
+                    sign_id=row["sign_id"],
+                    signer_id=row["signer_id"],
+                    split=row["split"],
+                    source_kind=source_kind,
+                    detected_frame_count=int(present.sum()),
+                )
+            except Exception as exc:
+                failures.append((row["path"], str(exc)))
 
     coverage = detected_frames / max(total_frames, 1)
     print(f"Hand landmark frame coverage: {detected_frames}/{total_frames} ({coverage:.1%})")
