@@ -123,6 +123,12 @@ jobs:
           cache: pip
           cache-dependency-path: ml/requirements.txt
 
+      - name: Install MediaPipe runtime libs
+        if: inputs.model_size == 'hand_landmark_tcn'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libgles2
+
       - name: Install ML deps (CPU torch, smaller than default CUDA build)
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch
