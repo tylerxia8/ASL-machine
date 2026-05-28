@@ -9,7 +9,7 @@ import torch
 from sklearn.metrics import classification_report, confusion_matrix
 from torch.utils.data import DataLoader
 
-from eval import splice_metrics
+from eval import _build_auto_block, _splice
 from landmark_dataset import HandLandmarkDataset
 from landmark_model import build_landmark_model
 
@@ -28,6 +28,8 @@ def main():
     sign_ids = ckpt["sign_ids"]
     label_to_idx = ckpt["label_to_idx"]
     ds = HandLandmarkDataset(Path(args.manifest), "test", label_to_idx, Path(args.feature_dir), augment=False)
+    if len(ds) == 0:
+        raise SystemExit("No usable hand-landmark features for test evaluation.")
     loader = DataLoader(ds, batch_size=64, shuffle=False, num_workers=0)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,7 +71,8 @@ def main():
         zero_division=0,
         output_dict=True,
     )
-    cm = confusion_matrix(y_true, y_pred, labels=labels_idx).tolist()
+    cm_array = confusion_matrix(y_true, y_pred, labels=labels_idx)
+    cm = cm_array.tolist()
     accuracy = sum(int(a == b) for a, b in zip(y_true, y_pred)) / max(len(y_true), 1)
 
     bins = []
@@ -102,7 +105,10 @@ def main():
     out = ML_ROOT / "exports" / "eval_metrics.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
-    splice_metrics(ROOT / "docs" / "VALIDATION_REPORT.md", metrics)
+    report_path = ROOT / "docs" / "VALIDATION_REPORT.md"
+    existing = report_path.read_text(encoding="utf-8") if report_path.exists() else ""
+    auto_block = _build_auto_block(ckpt, sign_ids, accuracy, report, cm_array, bins)
+    report_path.write_text(_splice(existing, auto_block), encoding="utf-8")
     print(f"Wrote {out} accuracy={accuracy:.4f}")
 
 
