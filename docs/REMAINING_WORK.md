@@ -2,6 +2,10 @@
 
 This project now has a runnable browser app, API, bundled Wave 1 model files, validation metrics, and rubric mapping. The remaining work is mostly model-quality work, not application plumbing.
 
+For the product-quality path, we are now intentionally relaxing the original
+"no pretrained landmark detector" constraint. See
+[`PRODUCT_MODEL_PIVOT.md`](PRODUCT_MODEL_PIVOT.md).
+
 ## Remaining blocker
 
 All signer data for the recognition model comes from Sem-Lex. Local `signer_a` clips are kept only as learner-quality smoke/calibration samples and should not be treated as the signer-diversity source.

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
 import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
+import { captureHandLandmarkTensor } from "../lib/handLandmarks";
 
 const RECORD_MS = 2000;
 import { downsampleForModel } from "../lib/clipFeatures";
@@ -213,20 +214,25 @@ export default function PracticePage() {
     const captureFrameCount = meta?.num_frames ?? 24;
     const modelT = meta?.num_frames ?? 8;
     const modelSz = meta?.frame_size ?? 32;
-    const rawFrames = await captureFramesAsync(
-      videoRef.current,
-      captureFrameCount,
-      captureSz,
-      RECORD_MS,
-      meta?.preprocess ?? "center_crop"
-    );
     setPhase("evaluating");
-    const tensor =
-      meta?.input_type === "flat"
-        ? downsampleForModel(rawFrames, modelT, modelSz, modelSz)
-        : framesToTensor(rawFrames, captureFrameCount, captureSz, captureSz);
     try {
-      const { predictedLabel, confidence: conf } = await runInference(tensor);
+      let modelInput: Float32Array;
+      if (meta?.input_type === "hand_landmarks") {
+        modelInput = await captureHandLandmarkTensor(videoRef.current, captureFrameCount, RECORD_MS);
+      } else {
+        const rawFrames = await captureFramesAsync(
+          videoRef.current,
+          captureFrameCount,
+          captureSz,
+          RECORD_MS,
+          meta?.preprocess ?? "center_crop"
+        );
+        modelInput =
+          meta?.input_type === "flat"
+            ? downsampleForModel(rawFrames, modelT, modelSz, modelSz)
+            : framesToTensor(rawFrames, captureFrameCount, captureSz, captureSz);
+      }
+      const { predictedLabel, confidence: conf } = await runInference(modelInput);
       const result = evaluateAttempt(current.sign_id, predictedLabel, conf);
       setOutcome(result.outcome);
       setConfidence(result.confidence);
@@ -252,8 +258,8 @@ export default function PracticePage() {
   };
 
   const recordAndEvaluate = () => {
-    // captureFramesAsync (inside evaluate) waits RECORD_MS on its own;
-    // calling evaluate() directly is correct. UI just needs to flip to "recording".
+    // The model-specific capture path inside evaluate() waits RECORD_MS.
+    // UI just needs to flip to "recording".
     setPhase("recording");
     void evaluate();
   };

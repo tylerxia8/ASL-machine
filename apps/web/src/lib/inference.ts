@@ -5,11 +5,12 @@ export type LabelsFile = {
   sign_ids: string[];
   label_to_idx: Record<string, number>;
   model_version: string;
-  input_type?: "flat" | "3d";
+  input_type?: "flat" | "3d" | "hand_landmarks";
   n_features?: number;
   num_frames?: number;
   frame_size?: number;
   preprocess?: "center_crop" | "letterbox";
+  pretrained_detector?: string;
 };
 
 export class ModelUnavailableError extends Error {
@@ -85,7 +86,9 @@ export async function runInference(tensorData: Float32Array) {
   const shape: number[] =
     labels.input_type === "flat"
       ? [1, inputData.length]
-      : [1, 3, labels.num_frames ?? 24, labels.frame_size ?? 160, labels.frame_size ?? 160];
+      : labels.input_type === "hand_landmarks"
+        ? [1, labels.n_features ?? 132, labels.num_frames ?? 24]
+        : [1, 3, labels.num_frames ?? 24, labels.frame_size ?? 160, labels.frame_size ?? 160];
 
   const input = new ort.Tensor("float32", inputData, shape);
   const results = await session.run({ [inputName]: input });

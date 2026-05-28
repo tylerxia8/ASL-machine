@@ -13,3 +13,6 @@ tqdm>=4.66.0
 # 23.7 GB train tarball on a 14 GB runner).
 gdown>=5.2.0
 requests>=2.31.0
+# Product-quality landmark path. This intentionally uses a pretrained hand
+# detector; see docs/PRODUCT_MODEL_PIVOT.md.
+mediapipe>=0.10.35

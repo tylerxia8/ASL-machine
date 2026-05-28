@@ -39,6 +39,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "ml"))
 
 from model import build_model  # noqa: E402
+from landmark_dataset import HAND_FEATURES, NUM_FRAMES  # noqa: E402
+from landmark_model import build_landmark_model  # noqa: E402
 
 WAVE1 = ROOT / "content" / "wave1_signs.csv"
 
@@ -99,6 +101,33 @@ def main() -> int:
     finally:
         Path(onnx_path).unlink(missing_ok=True)
 
+    landmark_model = build_landmark_model(num_classes=len(sign_ids))
+    landmark_model.eval()
+    landmark_dummy = torch.randn(1, HAND_FEATURES, NUM_FRAMES)
+    with torch.no_grad():
+        landmark_logits = landmark_model(landmark_dummy)
+    assert landmark_logits.shape == (1, len(sign_ids)), f"bad landmark logits shape {landmark_logits.shape}"
+    with tempfile.NamedTemporaryFile(suffix=".onnx", delete=False) as f:
+        landmark_onnx_path = f.name
+    try:
+        torch.onnx.export(
+            landmark_model,
+            landmark_dummy,
+            landmark_onnx_path,
+            input_names=["input"],
+            output_names=["logits"],
+            dynamic_axes={"input": {0: "batch"}, "logits": {0: "batch"}},
+            opset_version=18,
+            dynamo=False,
+        )
+        sess = ort.InferenceSession(landmark_onnx_path, providers=["CPUExecutionProvider"])
+        landmark_onnx_out = sess.run(None, {"input": landmark_dummy.numpy()})[0]
+        max_diff = float(np.max(np.abs(landmark_onnx_out - landmark_logits.numpy())))
+        assert max_diff < 1e-3, f"landmark pytorch vs onnx diverged by {max_diff}"
+        print(f"Hand-landmark ONNX numerical match (max abs diff {max_diff:.2e})")
+    finally:
+        Path(landmark_onnx_path).unlink(missing_ok=True)
+
     schema = {
         "sign_ids": sign_ids,
         "label_to_idx": {s: i for i, s in enumerate(sign_ids)},
@@ -111,6 +140,23 @@ def main() -> int:
     }
     required = {"sign_ids", "label_to_idx", "model_version", "input_type", "num_frames", "frame_size", "preprocess"}
     assert required.issubset(schema), f"labels.json schema missing: {required - schema.keys()}"
+    landmark_schema = {
+        "sign_ids": sign_ids,
+        "label_to_idx": {s: i for i, s in enumerate(sign_ids)},
+        "model_version": "landmark-smoke",
+        "model_size": "hand_landmark_tcn",
+        "input_type": "hand_landmarks",
+        "num_frames": NUM_FRAMES,
+        "n_features": HAND_FEATURES,
+        "pretrained_detector": "mediapipe_hands",
+    }
+    landmark_required = {
+        "sign_ids", "label_to_idx", "model_version", "input_type",
+        "num_frames", "n_features", "pretrained_detector",
+    }
+    assert landmark_required.issubset(landmark_schema), (
+        f"landmark labels.json schema missing: {landmark_required - landmark_schema.keys()}"
+    )
     print(f"\nlabels.json schema OK: {sorted(schema.keys())}")
     print("\nSMOKE PASS — canonical training/export/inference pipeline is intact.")
     return 0
