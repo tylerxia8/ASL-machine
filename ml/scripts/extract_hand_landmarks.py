@@ -189,15 +189,16 @@ def main() -> int:
                 present = np.abs(features).sum(axis=1) > 0
                 detected_frames += int(present.sum())
                 total_frames += int(features.shape[0])
-                np.savez_compressed(
-                    out_path,
-                    features=features,
-                    sign_id=row["sign_id"],
-                    signer_id=row["signer_id"],
-                    split=row["split"],
-                    source_kind=source_kind,
-                    detected_frame_count=int(present.sum()),
-                )
+                with open(out_path, "wb") as f:
+                    np.savez_compressed(
+                        f,
+                        features=features,
+                        sign_id=row["sign_id"],
+                        signer_id=row["signer_id"],
+                        split=row["split"],
+                        source_kind=source_kind,
+                        detected_frame_count=int(present.sum()),
+                    )
             except Exception as exc:
                 failures.append((row["path"], str(exc)))
 
