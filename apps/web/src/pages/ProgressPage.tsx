@@ -5,6 +5,12 @@ import { fetchMastery, fetchProgress, Mastery, ProgressSummary } from "../lib/ap
 
 type LoadState = "loading" | "loaded" | "error";
 
+function outcomeLabel(outcome: string) {
+  if (outcome === "pass") return "pass";
+  if (outcome === "retry") return "needs practice";
+  return outcome;
+}
+
 export default function ProgressPage() {
   const auth = useAuth();
   const userId = getUserId(auth);
@@ -145,7 +151,7 @@ export default function ProgressPage() {
             {summary.recent_attempts.map((a) => (
               <li key={a.id} className="card" style={{ marginBottom: "0.5rem" }}>
                 <code>{a.sign_id}</code> —{" "}
-                <span className={`status-${a.outcome}`}>{a.outcome}</span>
+                <span className={`status-${a.outcome}`}>{outcomeLabel(a.outcome)}</span>
                 {a.confidence != null && (
                   <span style={{ color: "var(--muted)" }}> ({(a.confidence * 100).toFixed(0)}% confidence)</span>
                 )}

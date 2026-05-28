@@ -9,11 +9,11 @@ Covers rubric Req 13 (privacy-conscious video handling) and Req 5 (browser-first
 - After each attempt the API receives **metadata only** (no images, no audio, no biometric features):
   - `sign_id` (the prompted sign, e.g. `"hello"`)
   - `outcome` (`pass` / `fail` / `retry`)
-  - `confidence` (a single float)
-  - `predicted_label` (which class the model thought it saw)
+  - `confidence` (a single float for recognition-demo attempts; absent/null for guided self-check)
+  - `predicted_label` (`self_check` for guided self-check, or the class the model thought it saw in recognition demo)
   - `session_id` and timestamp
 
-You can verify this directly in **DevTools → Network tab** during a Record → Evaluate cycle on the practice page. You should see exactly two POSTs: `/attempts` (the metadata above) and `/signs/{id}/hint` (text content from the hint files). No request body should contain a binary blob.
+You can verify this directly in **DevTools → Network tab** during guided self-check and recognition-demo cycles on the practice page. You should see `/attempts` POSTs (the metadata above) and `/signs/{id}/hint` GETs (text content from the hint files). No request body should contain a binary blob.
 
 ## Server-stored data
 

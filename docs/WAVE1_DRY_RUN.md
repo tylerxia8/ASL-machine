@@ -32,7 +32,7 @@ Run after the guided practice flow is deployed locally. The current recognition 
 | 8 | Switch to **Recognition demo** for one trained sign | Record & evaluate path still runs locally, but result is treated as experimental |
 | 9 | Retry button works; "Skip to next" works | Both functional; next sign loads |
 | 10 | Continue to a reference-only sign (Full catalog session) | "reference" chip visible; guided self-check still works; recognition demo hides evaluation |
-| 11 | Open **Progress**; confirm recent attempts listed | Sign IDs + outcomes + timestamps appear |
+| 11 | Open **Progress**; confirm recent attempts listed | Sign IDs + outcomes + timestamps appear; guided self-check attempts do not show model confidence |
 | 12 | Hard-refresh page (Ctrl+F5); progress still visible | DB state survives reload |
 | 13 | In browser settings, deny camera permission; reload | Page shows "Camera access was denied…" with **Retry camera** button |
 | 14 | Open DevTools Network tab during guided and recognition recording | **No POST containing a blob**. Only `/attempts`, `/signs/{id}/hint` (JSON payloads, no media). |

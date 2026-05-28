@@ -13,6 +13,22 @@ type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
 type PracticeMode = "guided" | "recognition";
 type SignReference = { handshape: string; movement: string; location: string };
 
+const PRACTICE_MODE_KEY = "practice_mode";
+
+function readPracticeMode(): PracticeMode {
+  try {
+    return localStorage.getItem(PRACTICE_MODE_KEY) === "recognition" ? "recognition" : "guided";
+  } catch {
+    return "guided";
+  }
+}
+
+function outcomeLabel(outcome: string) {
+  if (outcome === "pass") return "pass";
+  if (outcome === "retry") return "needs practice";
+  return outcome;
+}
+
 const CAMERA_HELP: Record<string, string> = {
   denied: "Camera access was denied. Enable camera permission in browser settings and reload.",
   unsupported: "This browser does not support camera access. Use Chrome or Edge on desktop.",
@@ -31,7 +47,7 @@ export default function PracticePage() {
   const [phase, setPhase] = useState<Phase>("prompt");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null);
-  const [practiceMode, setPracticeMode] = useState<PracticeMode>("guided");
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>(readPracticeMode);
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
   const [hint, setHint] = useState<string | null>(null);
@@ -102,7 +118,7 @@ export default function PracticePage() {
 
   const saveOutcome = async (
     result: EvalOutcome,
-    conf: number,
+    conf: number | undefined,
     predictedLabel: string,
     source: "self_check" | "model"
   ) => {
@@ -121,12 +137,26 @@ export default function PracticePage() {
     trackEvent("attempt", {
       sign_id: current.sign_id,
       outcome: result,
-      confidence: conf,
+      confidence: conf ?? null,
       source,
     });
     const log = [...sessionLog, { sign: current.sign_id, outcome: result }];
     setSessionLog(log);
     sessionStorage.setItem("session_log", JSON.stringify(log));
+  };
+
+  const updatePracticeMode = (mode: PracticeMode) => {
+    try {
+      localStorage.setItem(PRACTICE_MODE_KEY, mode);
+    } catch {
+      // Storage can be blocked in hardened/private browser contexts.
+    }
+    setPracticeMode(mode);
+    setPhase("prompt");
+    setOutcome(null);
+    setHint(null);
+    setPredicted("");
+    setConfidence(0);
   };
 
   const startSelfCheck = () => {
@@ -142,9 +172,8 @@ export default function PracticePage() {
 
   const completeSelfCheck = async (result: EvalOutcome) => {
     if (!current) return;
-    const conf = result === "pass" ? 1 : 0;
     setOutcome(result);
-    setConfidence(conf);
+    setConfidence(0);
     setPredicted("self_check");
     if (result !== "pass") {
       try {
@@ -157,7 +186,7 @@ export default function PracticePage() {
       setHint(null);
     }
     try {
-      await saveOutcome(result, conf, "self_check", "self_check");
+      await saveOutcome(result, undefined, "self_check", "self_check");
     } catch (err) {
       trackEvent("attempt_record_error", { error: String(err), source: "self_check" });
     }
@@ -274,17 +303,24 @@ export default function PracticePage() {
         <button
           className={practiceMode === "guided" ? "btn" : "btn btn-secondary"}
           type="button"
-          onClick={() => setPracticeMode("guided")}
+          aria-pressed={practiceMode === "guided"}
+          onClick={() => updatePracticeMode("guided")}
         >
           Guided self-check
         </button>
         <button
           className={practiceMode === "recognition" ? "btn" : "btn btn-secondary"}
           type="button"
-          onClick={() => setPracticeMode("recognition")}
+          aria-pressed={practiceMode === "recognition"}
+          onClick={() => updatePracticeMode("recognition")}
         >
           Recognition demo
         </button>
+        {practiceMode === "recognition" && (
+          <span style={{ color: "var(--retry)", fontSize: "0.85rem" }}>
+            Experimental grading. Use guided self-check for learning.
+          </span>
+        )}
       </div>
 
       {cameraError ? (
@@ -445,7 +481,7 @@ export default function PracticePage() {
           <ul style={{ margin: "0.25rem 0", paddingLeft: "1.2rem" }}>
             {sessionLog.slice(-8).map((e, i) => (
               <li key={i}>
-                {e.sign}: <span className={`status-${e.outcome}`}>{e.outcome}</span>
+                {e.sign}: <span className={`status-${e.outcome}`}>{outcomeLabel(e.outcome)}</span>
               </li>
             ))}
           </ul>
