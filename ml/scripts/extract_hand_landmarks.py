@@ -143,11 +143,11 @@ def create_landmarker(model_path: Path, min_detection_confidence: float):
     return mp, vision.HandLandmarker.create_from_options(options)
 
 
-def extract_features(frames: list[np.ndarray], mp, landmarker) -> np.ndarray:
+def extract_features(frames: list[np.ndarray], mp, landmarker, start_frame: int = 0) -> np.ndarray:
     features = np.zeros((NUM_FRAMES, HAND_FEATURES), dtype=np.float32)
     for i, frame in enumerate(frames):
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(frame))
-        result = landmarker.detect_for_video(image, i * 1000 // 12)
+        result = landmarker.detect_for_video(image, (start_frame + i) * 1000 // 12)
         features[i] = _features_for_result(result)
     return features
 
@@ -173,7 +173,7 @@ def main() -> int:
     model_path = _ensure_model(Path(args.hand_model))
     mp, landmarker = create_landmarker(model_path, args.min_detection_confidence)
     with landmarker:
-        for row in tqdm(manifest["clips"], desc="Extract hand landmarks"):
+        for clip_index, row in enumerate(tqdm(manifest["clips"], desc="Extract hand landmarks")):
             clip_path = ROOT / row["path"]
             out_path = feature_path_for_clip(row["path"], out_dir)
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -185,7 +185,7 @@ def main() -> int:
                 else:
                     frames = _load_clip_frames(clip_path, NUM_FRAMES)
                     source_kind = "imported_clip"
-                features = extract_features(frames, mp, landmarker)
+                features = extract_features(frames, mp, landmarker, start_frame=clip_index * NUM_FRAMES)
                 present = np.abs(features).sum(axis=1) > 0
                 detected_frames += int(present.sum())
                 total_frames += int(features.shape[0])
