@@ -86,6 +86,7 @@ on:
           - default
           - frame
           - tcn
+          - motion_tcn
         default: small
       preprocess:
         description: "Raw video resize mode before training"

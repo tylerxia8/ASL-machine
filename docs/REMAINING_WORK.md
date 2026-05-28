@@ -104,6 +104,7 @@ Local training hardening now added and verified in the v10 run:
 - `ml/scripts/make_contact_sheets.py` renders visual QA sheets from imported clips, and from raw staged videos when available, so the next Sem-Lex run can inspect whether center-cropping removes hands/signing space
 - `ml/scripts/build_manifest.py` now chooses signer-disjoint test signers by greedy Wave 1 sign coverage instead of sorted signer ID, reducing accidental zero-test-support signs
 - After selecting held-out test signers, `build_manifest.py` also assigns validation clips per sign where at least two non-test clips remain, reducing accidental zero-val-support signs
+- `ml/model.py` now includes `motion_tcn`, a from-scratch dual-stream architecture that encodes both RGB frames and frame-to-frame motion before temporal Conv1d blocks. It keeps the same browser input/export contract and is intended as the next Sem-Lex experiment after v15.
 
 ## Next training/diagnostic work
 
@@ -111,7 +112,8 @@ Do not spend more runs on the same settings. The v10 hardened run lowered confid
 
 - Inspect the v14/v15 contact sheets for low-recall and high-confusion signs, but treat crop loss as an insufficient explanation by itself because the letterbox run did not materially improve accuracy.
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
-- Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
+- Run `model_size=motion_tcn` with `preprocess=letterbox` as the next controlled experiment. This is still trained from scratch and avoids pretrained pose/landmark models, but gives the model explicit motion features instead of relying on RGB frames alone.
+- Consider a better Sem-Lex preprocessing/alignment strategy if `motion_tcn` still fails to generalize.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
 
 Example contact-sheet command after a manifest exists locally:

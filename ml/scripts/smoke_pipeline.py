@@ -48,9 +48,23 @@ def main() -> int:
         sign_ids = [row["sign_id"] for row in csv.DictReader(f)]
     print(f"[1/6] Loaded {len(sign_ids)} signs from wave1_signs.csv")
 
-    model = build_model(num_classes=len(sign_ids))
+    variants = ["default", "small", "frame", "tcn", "motion_tcn"]
+    for variant in variants:
+        variant_model = build_model(num_classes=len(sign_ids), size=variant)
+        variant_model.eval()
+        with torch.no_grad():
+            variant_logits = variant_model(torch.randn(1, 3, 24, 160, 160))
+        assert variant_logits.shape == (1, len(sign_ids)), (
+            f"{variant} produced bad logits shape {variant_logits.shape}"
+        )
+        print(
+            f"[2/6] Built {variant}: "
+            f"{sum(p.numel() for p in variant_model.parameters())/1e6:.2f}M params"
+        )
+
+    model = build_model(num_classes=len(sign_ids), size="motion_tcn")
     model.eval()
-    print(f"[2/6] Built SignClipCNN3D: "
+    print(f"[2/6] Export target SignClipMotionTCN: "
           f"{sum(p.numel() for p in model.parameters())/1e6:.2f}M params")
 
     dummy = torch.randn(1, 3, 24, 160, 160)
@@ -89,6 +103,7 @@ def main() -> int:
         "sign_ids": sign_ids,
         "label_to_idx": {s: i for i, s in enumerate(sign_ids)},
         "model_version": "smoke",
+        "model_size": "motion_tcn",
         "input_type": "3d",
         "num_frames": 24,
         "frame_size": 160,

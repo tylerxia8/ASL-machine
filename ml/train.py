@@ -25,10 +25,11 @@ def main():
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--model-version", default="v1")
-    parser.add_argument("--model-size", choices=["default", "small", "frame", "tcn"], default="default",
+    parser.add_argument("--model-size", choices=["default", "small", "frame", "tcn", "motion_tcn"], default="default",
                         help="'small' (~720K params) for low-data regimes (<2k clips); "
                              "'frame' (~160K params) for frame-wise temporal pooling experiments; "
                              "'tcn' (~220K params) for frame-wise + temporal Conv1d experiments; "
+                             "'motion_tcn' (~390K params) for dual-stream RGB + frame-difference temporal experiments; "
                              "'default' (~3.57M params) otherwise.")
     parser.add_argument("--early-stop-patience", type=int, default=4,
                         help="Stop early if val_acc doesn't improve for this many epochs. "
