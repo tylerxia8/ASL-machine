@@ -93,7 +93,13 @@ def _features_for_result(result) -> np.ndarray:
     for idx, landmarks in enumerate(hand_landmarks):
         label = ""
         if handedness and idx < len(handedness):
-            first = handedness[idx][0] if isinstance(handedness[idx], list) else handedness[idx].classification[0]
+            entry = handedness[idx]
+            if isinstance(entry, (list, tuple)):
+                first = entry[0]
+            elif hasattr(entry, "classification"):
+                first = entry.classification[0]
+            else:
+                first = entry
             label = getattr(first, "category_name", None) or getattr(first, "label", "")
             label = label.lower()
         vec = _hand_vector(landmarks)
@@ -130,7 +136,7 @@ def create_landmarker(model_path: Path, min_detection_confidence: float):
         base_options=python.BaseOptions(model_asset_path=str(model_path)),
         running_mode=vision.RunningMode.VIDEO,
         num_hands=2,
-        min_detection_confidence=min_detection_confidence,
+        min_hand_detection_confidence=min_detection_confidence,
         min_hand_presence_confidence=0.35,
         min_tracking_confidence=0.40,
     )
