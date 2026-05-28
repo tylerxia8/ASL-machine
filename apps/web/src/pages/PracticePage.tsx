@@ -9,7 +9,8 @@ import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, getLabels, ModelUnavailableError } from "../lib/inference";
 import { evaluateAttempt, EvalOutcome } from "../lib/threshold";
 
-type Phase = "prompt" | "recording" | "evaluating" | "result";
+type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
+type PracticeMode = "guided" | "recognition";
 type SignReference = { handshape: string; movement: string; location: string };
 
 const CAMERA_HELP: Record<string, string> = {
@@ -30,6 +31,7 @@ export default function PracticePage() {
   const [phase, setPhase] = useState<Phase>("prompt");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null);
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>("guided");
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
   const [hint, setHint] = useState<string | null>(null);
@@ -98,6 +100,70 @@ export default function PracticePage() {
     return () => stopCamera();
   }, [startCamera]);
 
+  const saveOutcome = async (
+    result: EvalOutcome,
+    conf: number,
+    predictedLabel: string,
+    source: "self_check" | "model"
+  ) => {
+    if (!current) return;
+    await recordAttempt(
+      userId,
+      {
+        sign_id: current.sign_id,
+        outcome: result,
+        confidence: conf,
+        predicted_label: predictedLabel,
+        session_id: sessionId,
+      },
+      auth.session?.access_token
+    );
+    trackEvent("attempt", {
+      sign_id: current.sign_id,
+      outcome: result,
+      confidence: conf,
+      source,
+    });
+    const log = [...sessionLog, { sign: current.sign_id, outcome: result }];
+    setSessionLog(log);
+    sessionStorage.setItem("session_log", JSON.stringify(log));
+  };
+
+  const startSelfCheck = () => {
+    setPhase("recording");
+    window.setTimeout(() => {
+      setOutcome(null);
+      setConfidence(0);
+      setPredicted("");
+      setHint(null);
+      setPhase("selfCheck");
+    }, RECORD_MS);
+  };
+
+  const completeSelfCheck = async (result: EvalOutcome) => {
+    if (!current) return;
+    const conf = result === "pass" ? 1 : 0;
+    setOutcome(result);
+    setConfidence(conf);
+    setPredicted("self_check");
+    if (result !== "pass") {
+      try {
+        const h = await fetchHint(current.sign_id, "framing", userId);
+        setHint(h.message);
+      } catch {
+        setHint("Review the reference, then try the sign again slowly inside the guide box.");
+      }
+    } else {
+      setHint(null);
+    }
+    try {
+      await saveOutcome(result, conf, "self_check", "self_check");
+    } catch (err) {
+      trackEvent("attempt_record_error", { error: String(err), source: "self_check" });
+    }
+    setPhase("result");
+  };
+
   const evaluate = async () => {
     if (!videoRef.current || !current) return;
     try {
@@ -146,21 +212,7 @@ export default function PracticePage() {
         setHint(null);
       }
 
-      await recordAttempt(
-        userId,
-        {
-          sign_id: current.sign_id,
-          outcome: result.outcome,
-          confidence: conf,
-          predicted_label: predictedLabel,
-          session_id: sessionId,
-        },
-        auth.session?.access_token
-      );
-      trackEvent("attempt", { sign_id: current.sign_id, outcome: result.outcome, confidence: conf });
-      const log = [...sessionLog, { sign: current.sign_id, outcome: result.outcome }];
-      setSessionLog(log);
-      sessionStorage.setItem("session_log", JSON.stringify(log));
+      await saveOutcome(result.outcome, conf, predictedLabel, "model");
       setPhase("result");
     } catch (err) {
       setOutcome("fail");
@@ -217,6 +269,24 @@ export default function PracticePage() {
         )}
       </p>
 
+      <div className="card" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+        <strong>Mode</strong>
+        <button
+          className={practiceMode === "guided" ? "btn" : "btn btn-secondary"}
+          type="button"
+          onClick={() => setPracticeMode("guided")}
+        >
+          Guided self-check
+        </button>
+        <button
+          className={practiceMode === "recognition" ? "btn" : "btn btn-secondary"}
+          type="button"
+          onClick={() => setPracticeMode("recognition")}
+        >
+          Recognition demo
+        </button>
+      </div>
+
       {cameraError ? (
         <div className="card status-fail">
           <p>{cameraError}</p>
@@ -259,7 +329,7 @@ export default function PracticePage() {
         </div>
       )}
 
-      {modelError && (
+      {modelError && practiceMode === "recognition" && (
         <div className="card status-fail" style={{ marginTop: "1rem" }}>
           <strong>Recognition model unavailable</strong>
           <p style={{ margin: "0.25rem 0 0" }}>{modelError}</p>
@@ -269,7 +339,9 @@ export default function PracticePage() {
       <div className="card" style={{ marginTop: "1rem" }}>
         {phase === "prompt" && (
           <>
-            {current?.trained === false ? (
+            {practiceMode === "guided" ? (
+              <p>Record your sign, compare handshape, movement, and location with the reference, then log how it went.</p>
+            ) : current?.trained === false ? (
               <p style={{ color: "var(--muted)" }}>
                 This sign isn't in the trained model yet. Use the reference below to learn it, then skip to the next sign.
               </p>
@@ -277,7 +349,12 @@ export default function PracticePage() {
               <p>When you click Record, perform the sign inside the box. Recording lasts {RECORD_MS / 1000} seconds.</p>
             )}
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-              {current?.trained !== false && (
+              {practiceMode === "guided" && (
+                <button className="btn" disabled={!!cameraError} onClick={startSelfCheck}>
+                  Record & self-check
+                </button>
+              )}
+              {practiceMode === "recognition" && current?.trained !== false && (
                 <button className="btn" disabled={!!cameraError || !!modelError} onClick={recordAndEvaluate}>
                   Record & evaluate
                 </button>
@@ -291,7 +368,7 @@ export default function PracticePage() {
                   {showReference ? "Hide reference" : "Show me the sign"}
                 </button>
               )}
-              {current?.trained === false && (
+              {practiceMode === "recognition" && current?.trained === false && (
                 <button className="btn" type="button" onClick={nextSign}>
                   Next sign
                 </button>
@@ -310,14 +387,37 @@ export default function PracticePage() {
           </>
         )}
         {phase === "recording" && <p>Recording… hold your sign.</p>}
+        {phase === "selfCheck" && (
+          <>
+            <p>Compare your sign with the reference, then log the attempt.</p>
+            {reference && (
+              <div className="hint-panel" style={{ marginBottom: "0.75rem" }}>
+                <strong>Reference</strong>
+                <p style={{ margin: "0.25rem 0 0" }}>
+                  Handshape: {reference.handshape}<br />
+                  Movement: {reference.movement}<br />
+                  Location: {reference.location}
+                </p>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => void completeSelfCheck("pass")}>
+                Matched it
+              </button>
+              <button className="btn btn-secondary" onClick={() => void completeSelfCheck("retry")}>
+                Needs practice
+              </button>
+            </div>
+          </>
+        )}
         {phase === "evaluating" && <p>Evaluating locally…</p>}
         {phase === "result" && outcome && (
           <>
             <p className={`status-${outcome}`} style={{ fontSize: "1.25rem", fontWeight: 600 }}>
-              {outcome === "pass" ? "Pass" : outcome === "retry" ? "Try again (uncertain)" : "Fail"}
-              {outcome !== "pass" && ` — ${(confidence * 100).toFixed(0)}% confidence`}
+              {outcome === "pass" ? "Pass" : outcome === "retry" ? "Needs practice" : "Fail"}
+              {practiceMode === "recognition" && outcome !== "pass" && ` — ${(confidence * 100).toFixed(0)}% confidence`}
             </p>
-            {predicted && outcome !== "pass" && (
+            {practiceMode === "recognition" && predicted && outcome !== "pass" && (
               <p style={{ color: "var(--muted)" }}>Detected: {predicted}</p>
             )}
             {hint && (

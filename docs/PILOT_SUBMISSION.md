@@ -15,7 +15,7 @@ Project repo: https://github.com/tylerxia8/ASL-machine
 | 3 | Dataset & training process docs (no-pretrained evidence) | [`docs/DATASET_AND_TRAINING.md`](DATASET_AND_TRAINING.md) + [`docs/NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md) |
 | 4 | Validation report with accuracy + conditions + limitations | [`docs/VALIDATION_REPORT.md`](VALIDATION_REPORT.md) (narrative hand-written; metrics block populated by `ml/eval.py`) |
 | 5 | Learner accounts + progress tracking | [`apps/api/`](../apps/api/) (FastAPI) + [`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql) |
-| 6 | Practice interface (camera, pass/fail, hints, retry, saved progress) | [`apps/web/src/pages/PracticePage.tsx`](../apps/web/src/pages/PracticePage.tsx) |
+| 6 | Practice interface (camera, guided self-check, optional recognition demo, hints, retry, saved progress) | [`apps/web/src/pages/PracticePage.tsx`](../apps/web/src/pages/PracticePage.tsx) |
 | 7 | Privacy documentation | [`docs/PRIVACY.md`](PRIVACY.md) |
 
 ## Required Pilot Scope (rubric §4)
@@ -35,7 +35,7 @@ Project repo: https://github.com/tylerxia8/ASL-machine
 | 11 | Learner accounts | Supabase auth + [`apps/api/auth.py`](../apps/api/auth.py); dev fallback to SQLite + `dev-local-user`. |
 | 12 | Saved progress | [`supabase/migrations/001_initial_schema.sql`](../supabase/migrations/001_initial_schema.sql) tables: `attempts`, `practice_sessions`, `sign_mastery`. UI: [`apps/web/src/pages/ProgressPage.tsx`](../apps/web/src/pages/ProgressPage.tsx). |
 | 13 | Privacy-conscious video handling | [`docs/PRIVACY.md`](PRIVACY.md). Verifiable via DevTools Network tab: no media bytes leave the browser during practice. |
-| 14 | Web app usability | Onboarding-friendly: countdown + REC indicator, "Show me the sign" reference panel, single-button Record, explicit retry/next, untrained signs marked as "reference" instead of failing silently. |
+| 14 | Web app usability | Onboarding-friendly: guided self-check is the default practice mode, recognition remains an optional demo, REC indicator, "Show me the sign" reference panel, explicit retry/next, untrained signs marked as "reference" instead of failing silently. |
 | 15 | Pilot documentation | This file. Full doc index in `docs/`. |
 
 ## Out-of-Scope items (rubric §5) — confirmed absent
