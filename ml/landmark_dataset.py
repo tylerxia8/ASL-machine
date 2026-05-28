@@ -13,7 +13,9 @@ HAND_FEATURES = 132
 
 def feature_path_for_clip(clip_path: str, feature_dir: Path) -> Path:
     safe = clip_path.replace("\\", "/").replace("/", "__")
-    return feature_dir / f"{safe}.npz"
+    if not safe.endswith(".npz"):
+        safe = f"{safe}.npz"
+    return feature_dir / safe
 
 
 class HandLandmarkDataset(Dataset):
