@@ -90,57 +90,72 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 > This block is overwritten by `python ml/eval.py`. Edit the narrative
 > sections above/below; do not edit between these markers.
 
-**Model version:** `wave1-semlex-full-v8`
-**Test accuracy (clip-level, signer-disjoint):** 14.09%
-**Classes:** 25
-**Checkpoint val accuracy:** 0.08791208791208792
+**Model version:** `wave1-semlex-full-v18-hand-landmarks`  
+**Test accuracy (clip-level, signer-disjoint):** 78.31%  
+**Classes:** 25  
+**Checkpoint val accuracy:** 0.8803418803418803  
 **Confusion matrix shape:** 25×25
 
 ### Per-class metrics
 
 | Sign | Precision | Recall | F1 | Support |
 |------|-----------|--------|------|---------|
-| deaf | 0.00 | 0.00 | 0.00 | 13 |
-| eat | 0.00 | 0.00 | 0.00 | 12 |
-| five | 0.00 | 0.00 | 0.00 | 0 |
+| deaf | 0.47 | 0.68 | 0.55 | 31 |
+| eat | 0.92 | 0.87 | 0.89 | 38 |
+| five | 0.00 | 0.00 | 0.00 | 1 |
 | four | 0.00 | 0.00 | 0.00 | 2 |
-| friend | 0.00 | 0.00 | 0.00 | 19 |
-| goodbye | 0.00 | 0.00 | 0.00 | 1 |
-| hello | 0.00 | 0.00 | 0.00 | 3 |
-| help | 0.00 | 0.00 | 0.00 | 19 |
-| how | 0.00 | 0.00 | 0.00 | 4 |
-| meet | 0.00 | 0.00 | 0.00 | 8 |
-| name | 0.00 | 0.00 | 0.00 | 10 |
-| nice | 0.00 | 0.00 | 0.00 | 15 |
-| no | 0.00 | 0.00 | 0.00 | 6 |
-| one | 0.00 | 0.00 | 0.00 | 7 |
-| please | 0.00 | 0.00 | 0.00 | 4 |
-| sleep | 0.00 | 0.00 | 0.00 | 9 |
-| sorry | 0.00 | 0.00 | 0.00 | 1 |
-| thank_you | 0.00 | 0.00 | 0.00 | 2 |
-| three | 0.00 | 0.00 | 0.00 | 1 |
-| two | 0.00 | 0.00 | 0.00 | 3 |
-| water | 0.00 | 0.00 | 0.00 | 12 |
-| what | 0.00 | 0.00 | 0.00 | 10 |
-| where | 0.14 | 1.00 | 0.25 | 31 |
-| who | 0.00 | 0.00 | 0.00 | 23 |
-| yes | 0.00 | 0.00 | 0.00 | 5 |
-| **macro avg** | 0.01 | 0.04 | 0.01 | 220 |
+| friend | 0.79 | 1.00 | 0.88 | 23 |
+| goodbye | 0.30 | 0.75 | 0.43 | 8 |
+| hello | 0.70 | 0.50 | 0.58 | 14 |
+| help | 0.89 | 0.88 | 0.88 | 48 |
+| how | 0.50 | 0.43 | 0.46 | 7 |
+| meet | 1.00 | 0.85 | 0.92 | 20 |
+| name | 0.97 | 0.97 | 0.97 | 30 |
+| nice | 0.90 | 0.82 | 0.86 | 33 |
+| no | 0.70 | 0.64 | 0.67 | 22 |
+| one | 0.94 | 0.89 | 0.91 | 18 |
+| please | 0.75 | 0.75 | 0.75 | 8 |
+| sleep | 0.85 | 0.92 | 0.88 | 25 |
+| sorry | 1.00 | 0.94 | 0.97 | 18 |
+| thank_you | 0.50 | 0.89 | 0.64 | 9 |
+| three | 0.50 | 0.80 | 0.62 | 5 |
+| two | 1.00 | 0.63 | 0.77 | 19 |
+| water | 0.95 | 1.00 | 0.97 | 37 |
+| what | 1.00 | 0.69 | 0.82 | 29 |
+| where | 0.67 | 0.84 | 0.75 | 49 |
+| who | 0.67 | 0.25 | 0.36 | 32 |
+| yes | 0.71 | 0.67 | 0.69 | 18 |
+| **macro avg** | 0.71 | 0.71 | 0.69 | 544 |
 
 ### Most-confused pairs (top 10)
 
 | True → | Predicted | Count |
 |--------|-----------|-------|
-| who | where | 23 |
-| help | where | 19 |
-| friend | where | 18 |
-| nice | where | 14 |
-| deaf | where | 13 |
-| water | where | 12 |
-| eat | where | 12 |
-| what | where | 10 |
-| name | where | 10 |
-| sleep | where | 9 |
+| who | where | 11 |
+| who | deaf | 11 |
+| deaf | where | 4 |
+| yes | friend | 3 |
+| where | goodbye | 3 |
+| where | deaf | 3 |
+| two | three | 3 |
+| no | yes | 3 |
+| nice | goodbye | 3 |
+| how | help | 3 |
+
+### Confidence calibration
+
+| Confidence | Clips | Correct | Accuracy |
+|------------|-------|---------|----------|
+| 0.0-0.1 | 0 | 0 | n/a |
+| 0.1-0.2 | 2 | 1 | 50.00% |
+| 0.2-0.3 | 6 | 0 | 0.00% |
+| 0.3-0.4 | 15 | 3 | 20.00% |
+| 0.4-0.5 | 21 | 9 | 42.86% |
+| 0.5-0.6 | 21 | 12 | 57.14% |
+| 0.6-0.7 | 35 | 18 | 51.43% |
+| 0.7-0.8 | 25 | 11 | 44.00% |
+| 0.8-0.9 | 45 | 26 | 57.78% |
+| 0.9-1.0 | 374 | 346 | 92.51% |
 
 <!-- AUTO-METRICS:END -->
 

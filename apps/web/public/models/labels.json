@@ -53,8 +53,10 @@
     "who": 23,
     "yes": 24
   },
-  "model_version": "wave1-semlex-full-v8",
-  "input_type": "3d",
+  "model_version": "wave1-semlex-full-v18-hand-landmarks",
+  "model_size": "hand_landmark_tcn",
+  "input_type": "hand_landmarks",
   "num_frames": 24,
-  "frame_size": 160
+  "n_features": 132,
+  "pretrained_detector": "mediapipe_hands"
 }
