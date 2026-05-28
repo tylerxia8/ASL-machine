@@ -21,6 +21,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-full-v12-frame` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=frame`, learning rate 0.0005, no label smoothing | 4.55% test accuracy, macro F1 0.01601. Better macro F1 than v8/v11 but still far below v8 accuracy; do not replace bundled model. |
 | `wave1-semlex-full-v13-tcn` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=tcn`, learning rate 0.0005, no label smoothing | 6.82% test accuracy, macro F1 0.02255. Best macro F1 so far, but still below v8 accuracy; do not replace bundled model. |
 | `wave1-semlex-full-v14-tcn-balanced-split` | `semlex`, `train,val,test`, 100 clips/sign, 30 epochs, `model_size=tcn`, learning rate 0.0005, no label smoothing, coverage-aware signer-disjoint split | 5.70% test accuracy, macro F1 0.03441. Best macro F1 so far and improved test coverage diagnostics, but still far below v8 accuracy; do not replace bundled model. |
+| `wave1-semlex-full-v15-tcn-letterbox` | Same as v14, but `preprocess=letterbox` instead of center crop | 6.07% test accuracy, macro F1 0.02845. Letterbox preserved more horizontal signing space and passed the memorization probe, but did not beat v8 or v14 macro F1; do not replace bundled model. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
@@ -68,6 +69,25 @@ The first full run after the split fix, `wave1-semlex-full-v14-tcn-balanced-spli
 - Test result: 5.70% accuracy, macro F1 0.03441, weighted F1 0.04886
 - Prediction spread improved compared with the old `where` collapse, but predictions still concentrated on a few labels (`nice`, `no`, `one`, `help`, `four`, `where`) and accuracy stayed below the v8 bundled model.
 
+After adding visual QA sheets and a controlled `letterbox` preprocessing mode, probe-only run `wave1-semlex-letterbox-probe-v1` showed:
+
+- Restricted input: Sem-Lex `val` split, 20 clips/sign cap
+- Contact sheet: 44 / 44 sampled clips matched back to raw videos
+- Zero-test-support signs: 0 / 24
+- Zero-val-support signs: 1 / 24 (`four`)
+- Overfit probe: PASS at 100% memorization accuracy
+
+The full letterbox run, `wave1-semlex-full-v15-tcn-letterbox` (`26544857096`), showed that preserving horizontal signing space alone was not enough:
+
+- Manifest clips: 1,411
+- Split counts: 750 train / 117 val / 544 test
+- Signer-disjoint test split: OK
+- Zero-test-support signs: 0 / 25
+- Zero-val-support signs: 1 / 25 (`five`)
+- Overfit probe: PASS
+- Test result: 6.07% accuracy, macro F1 0.02845, weighted F1 0.04448
+- Top predictions shifted to `goodbye`, `what`, `deaf`, and `who`, so preprocessing changed the failure mode but did not produce deployable recognition quality.
+
 Local training hardening now added and verified in the v10 run:
 
 - `ml/train.py` uses light label smoothing by default (`--label-smoothing 0.05`)
@@ -87,9 +107,9 @@ Local training hardening now added and verified in the v10 run:
 
 ## Next training/diagnostic work
 
-Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model improved macro F1, and v14 confirmed the split coverage fix on the full dataset, but neither is pilot-quality. The next useful work is preprocessing/visual diagnosis plus stronger architecture/training changes:
+Do not spend more runs on the same settings. The v10 hardened run lowered confidence and reduced the single-class `where` collapse somewhat, but it did not improve accuracy. The v11 lower-learning-rate small-model run passed the memorization gate, then still failed on signer-disjoint evaluation. The v12 frame-wise model improved macro F1 slightly but did not improve accuracy. The v13 TCN model improved macro F1, v14 confirmed the split coverage fix on the full dataset, and v15 tested letterbox preprocessing. None are pilot-quality. The next useful work is model/data strategy beyond whole-frame RGB from-scratch training:
 
-- Inspect Sem-Lex frame crops/contact sheets for low-recall and high-confusion signs. The current importer center-crops to a square, which may cut off hands or signing space for some videos.
+- Inspect the v14/v15 contact sheets for low-recall and high-confusion signs, but treat crop loss as an insufficient explanation by itself because the letterbox run did not materially improve accuracy.
 - Inspect label/video alignment for classes that collapse or have near-zero recall, but treat total label breakage as less likely because the tiny memorization probe passed.
 - Consider an even stronger temporal architecture or a better Sem-Lex preprocessing/alignment strategy, while still training from scratch and avoiding pretrained pose/landmark models.
 - Increase Sem-Lex clips per sign only after the overfit/alignment checks pass.
@@ -130,4 +150,4 @@ After training:
 
 ## Current blocker summary
 
-The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, `wave1-semlex-full-v12-frame`, `wave1-semlex-full-v13-tcn`, and `wave1-semlex-full-v14-tcn-balanced-split`) did not improve the bundled accuracy, so the next meaningful step is preprocessing/visual diagnosis and stronger architecture/training improvement on Sem-Lex.
+The current bundled model, `wave1-semlex-full-v8`, is valid as an integration/demo artifact but not pilot-quality. Validation accuracy is 14.09% with macro F1 0.01, and predictions collapse heavily toward `where`. Follow-up runs (`wave1-semlex-full-v9`, `wave1-semlex-full-v9-small`, `wave1-semlex-full-v10-hardened`, `wave1-semlex-full-v11-lr3e4-small`, `wave1-semlex-full-v12-frame`, `wave1-semlex-full-v13-tcn`, `wave1-semlex-full-v14-tcn-balanced-split`, and `wave1-semlex-full-v15-tcn-letterbox`) did not improve the bundled accuracy, so the next meaningful step is a product fallback/self-check path and a stronger model/data strategy than whole-frame RGB training from scratch.
