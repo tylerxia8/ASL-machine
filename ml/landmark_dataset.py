@@ -32,9 +32,11 @@ class HandLandmarkDataset(Dataset):
     ):
         with open(manifest_path, encoding="utf-8") as f:
             manifest = json.load(f)
-        self.items = [r for r in manifest["clips"] if r["split"] == split]
+        rows = [r for r in manifest["clips"] if r["split"] == split]
         self.label_to_idx = label_to_idx
         self.feature_dir = feature_dir
+        self.items = [r for r in rows if feature_path_for_clip(r["path"], feature_dir).exists()]
+        self.missing_features_count = len(rows) - len(self.items)
         self.augment = (split == "train") if augment is None else augment
         self.noise_std = noise_std
         self.dropout_prob = dropout_prob

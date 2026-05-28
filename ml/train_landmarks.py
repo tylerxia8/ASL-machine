@@ -40,6 +40,11 @@ def main():
 
     train_ds = HandLandmarkDataset(manifest_path, "train", label_to_idx, Path(args.feature_dir))
     val_ds = HandLandmarkDataset(manifest_path, "val", label_to_idx, Path(args.feature_dir), augment=False)
+    if not train_ds or not val_ds:
+        raise SystemExit(
+            "No usable hand-landmark features for training/validation "
+            f"({len(train_ds)} train, {len(val_ds)} val)."
+        )
 
     train_labels = [label_to_idx[row["sign_id"]] for row in train_ds.items]
     class_counts = Counter(train_labels)
@@ -50,6 +55,12 @@ def main():
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     print(f"Dataset: {len(train_ds)} train, {len(val_ds)} val, {len(sign_ids)} classes")
+    dropped = train_ds.missing_features_count + val_ds.missing_features_count
+    if dropped:
+        print(
+            "Dropped clips without extracted hand-landmark features: "
+            f"{dropped} ({train_ds.missing_features_count} train, {val_ds.missing_features_count} val)"
+        )
     print(f"Input: hand_landmarks ({HAND_FEATURES} features x {NUM_FRAMES} frames)")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
