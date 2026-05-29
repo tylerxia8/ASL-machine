@@ -1,9 +1,15 @@
 export type RecognitionFeedbackEntry = {
   ts?: number;
   signId?: string;
+  sign_id?: string;
   predictedLabel?: string;
+  predicted_label?: string;
   confidence?: number;
   accepted?: boolean;
+  correct?: boolean;
+  top_predictions?: { label: string; confidence: number }[];
+  tracking_ratio?: number | null;
+  model_version?: string;
 };
 
 export type RecognitionFeedbackSummary = {
@@ -22,6 +28,20 @@ export type RecognitionFeedbackSummary = {
 };
 
 const STORAGE_KEY = "recognition_feedback";
+
+export function feedbackSignId(entry: RecognitionFeedbackEntry) {
+  return entry.signId || entry.sign_id || "unknown";
+}
+
+export function feedbackPredictedLabel(entry: RecognitionFeedbackEntry) {
+  return entry.predictedLabel || entry.predicted_label || "unknown";
+}
+
+export function feedbackAccepted(entry: RecognitionFeedbackEntry) {
+  if (typeof entry.accepted === "boolean") return entry.accepted;
+  if (typeof entry.correct === "boolean") return entry.correct;
+  return false;
+}
 
 export function readRecognitionFeedback(): RecognitionFeedbackEntry[] {
   if (typeof localStorage === "undefined") return [];
@@ -43,18 +63,19 @@ export function summarizeRecognitionFeedback(entries: RecognitionFeedbackEntry[]
   };
 
   for (const entry of entries) {
-    if (entry.accepted) summary.accepted += 1;
+    const accepted = feedbackAccepted(entry);
+    if (accepted) summary.accepted += 1;
     else summary.rejected += 1;
 
-    const signId = entry.signId || "unknown";
+    const signId = feedbackSignId(entry);
     const row =
       summary.bySign[signId] ??
       (summary.bySign[signId] = { total: 0, accepted: 0, rejected: 0, commonPredictions: {} });
     row.total += 1;
-    if (entry.accepted) row.accepted += 1;
+    if (accepted) row.accepted += 1;
     else row.rejected += 1;
 
-    const predicted = entry.predictedLabel || "unknown";
+    const predicted = feedbackPredictedLabel(entry);
     row.commonPredictions[predicted] = (row.commonPredictions[predicted] ?? 0) + 1;
   }
 
@@ -65,10 +86,10 @@ export function recognitionFeedbackCsv(entries: RecognitionFeedbackEntry[]) {
   const header = ["timestamp", "sign_id", "predicted_label", "confidence", "accepted"];
   const rows = entries.map((entry) => [
     entry.ts ? new Date(entry.ts).toISOString() : "",
-    entry.signId ?? "",
-    entry.predictedLabel ?? "",
+    feedbackSignId(entry),
+    feedbackPredictedLabel(entry),
     typeof entry.confidence === "number" ? entry.confidence.toFixed(6) : "",
-    entry.accepted ? "true" : "false",
+    feedbackAccepted(entry) ? "true" : "false",
   ]);
   return [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/api";
 import { requestCamera, recordVideo, CameraError } from "../lib/camera";
+import { buildLearningPriorities } from "../lib/learningPlan";
 import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 
@@ -48,18 +49,13 @@ export default function CapturePage() {
   const feedbackSummary = useMemo(() => summarizeRecognitionFeedback(readRecognitionFeedback()), []);
 
   const orderedSigns = useMemo(() => {
-    const score = (sign: SignMeta) => {
-      const threshold = calibration?.thresholds?.[sign.sign_id];
-      const feedback = feedbackSummary.bySign[sign.sign_id];
-      const f1 = threshold?.f1 ?? 1;
-      const support = threshold?.support ?? 999;
-      const rejected = feedback?.rejected ?? 0;
-      const count = counts[sign.sign_id] ?? 0;
-      if (captureOrder === "fewest_clips") return count * 1000 + f1 * 100 - rejected;
-      if (captureOrder === "default") return signs.findIndex((s) => s.sign_id === sign.sign_id);
-      return f1 * 1000 + Math.min(support, 30) * 5 + count * 20 - rejected * 60;
-    };
-    return [...signs].sort((a, b) => score(a) - score(b) || a.gloss.localeCompare(b.gloss));
+    if (captureOrder === "default") return signs;
+    if (captureOrder === "fewest_clips") {
+      return [...signs].sort(
+        (a, b) => (counts[a.sign_id] ?? 0) - (counts[b.sign_id] ?? 0) || a.gloss.localeCompare(b.gloss)
+      );
+    }
+    return buildLearningPriorities(signs, calibration, feedbackSummary, counts).map((p) => p.sign);
   }, [calibration, captureOrder, counts, feedbackSummary.bySign, signs]);
 
   const current = orderedSigns[index];

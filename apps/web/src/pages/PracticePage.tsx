@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
@@ -7,16 +7,21 @@ import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLan
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, getLabels, ModelUnavailableError, summarizeProbabilities } from "../lib/inference";
 import { confusionHint, loadRecognitionCalibration, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
+import { buildLearningPriorities } from "../lib/learningPlan";
+import { personalizeThresholds } from "../lib/personalCalibration";
+import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 import { evaluateAttempt, EvalOutcome } from "../lib/threshold";
 
 type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
 type PracticeMode = "guided" | "recognition";
+type PracticeOrder = "weak_first" | "default" | "shuffle";
 type SignReference = { handshape: string; movement: string; location: string };
 
 const RECORD_MS = 2000;
 const MIN_HAND_TRACKING_RATIO = 0.35;
 const MULTI_WINDOW_CAPTURE_MS = 2400;
 const PRACTICE_MODE_KEY = "practice_mode";
+const PRACTICE_ORDER_KEY = "practice_order";
 
 function readPracticeMode(): PracticeMode {
   try {
@@ -24,6 +29,26 @@ function readPracticeMode(): PracticeMode {
   } catch {
     return "guided";
   }
+}
+
+function readPracticeOrder(): PracticeOrder {
+  try {
+    const value = localStorage.getItem(PRACTICE_ORDER_KEY);
+    return value === "default" || value === "shuffle" ? value : "weak_first";
+  } catch {
+    return "weak_first";
+  }
+}
+
+function stableShuffle(items: SignMeta[]) {
+  const rank = (signId: string) => {
+    let hash = 0;
+    for (const char of signId) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    return Math.sin(hash);
+  };
+  return [...items].sort((a, b) => {
+    return rank(a.sign_id) - rank(b.sign_id);
+  });
 }
 
 function outcomeLabel(outcome: string) {
@@ -65,6 +90,7 @@ export default function PracticePage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null);
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(readPracticeMode);
+  const [practiceOrder, setPracticeOrder] = useState<PracticeOrder>(readPracticeOrder);
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
   const [topPredictions, setTopPredictions] = useState<{ label: string; confidence: number }[]>([]);
@@ -78,10 +104,17 @@ export default function PracticePage() {
   const [reference, setReference] = useState<SignReference | null>(null);
   const [showReference, setShowReference] = useState(false);
   const [sessionLog, setSessionLog] = useState<{ sign: string; outcome: string }[]>([]);
+  const [recognitionFeedback, setRecognitionFeedback] = useState(readRecognitionFeedback);
   const sessionId = sessionStorage.getItem("practice_session_id") || undefined;
   const wave = Number(sessionStorage.getItem("practice_wave") || "1");
 
-  const current = signs[index];
+  const feedbackSummary = useMemo(() => summarizeRecognitionFeedback(recognitionFeedback), [recognitionFeedback]);
+  const orderedSigns = useMemo(() => {
+    if (practiceOrder === "default") return signs;
+    if (practiceOrder === "shuffle") return stableShuffle(signs);
+    return buildLearningPriorities(signs, calibration, feedbackSummary).map((p) => p.sign);
+  }, [calibration, feedbackSummary, practiceOrder, signs]);
+  const current = orderedSigns[index];
 
   useEffect(() => {
     const saved = sessionStorage.getItem("session_log");
@@ -209,6 +242,19 @@ export default function PracticePage() {
     setConfidence(0);
   };
 
+  const updatePracticeOrder = (order: PracticeOrder) => {
+    try {
+      localStorage.setItem(PRACTICE_ORDER_KEY, order);
+    } catch {
+      // Storage can be blocked in hardened/private browser contexts.
+    }
+    setPracticeOrder(order);
+    setIndex(0);
+    setPhase("prompt");
+    setOutcome(null);
+    setHint(null);
+  };
+
   const startSelfCheck = () => {
     setPhase("recording");
     window.setTimeout(() => {
@@ -313,7 +359,11 @@ export default function PracticePage() {
       setPhase("evaluating");
       const modelResult = averagedProbs ? summarizeProbabilities(averagedProbs) : await runInference(modelInput);
       const { predictedLabel, confidence: conf, topPredictions: top } = modelResult;
-      const signThresholds = thresholdsFor(calibration, current.sign_id);
+      const signThresholds = personalizeThresholds(
+        thresholdsFor(calibration, current.sign_id),
+        current.sign_id,
+        feedbackSummary
+      );
       const result = evaluateAttempt(
         current.sign_id,
         predictedLabel,
@@ -373,16 +423,19 @@ export default function PracticePage() {
     setTrackingRatio(null);
     setRecognitionFeedbackSaved(false);
     setPhase("prompt");
-    if (index + 1 < signs.length) setIndex(index + 1);
+    if (index + 1 < orderedSigns.length) setIndex(index + 1);
     else setIndex(0);
   };
 
   const saveRecognitionFeedback = (correct: boolean) => {
     if (!current || !predicted || predicted === "low_tracking") return;
     const entry = {
+      signId: current.sign_id,
       sign_id: current.sign_id,
+      predictedLabel: predicted,
       predicted_label: predicted,
       confidence,
+      accepted: correct,
       correct,
       top_predictions: topPredictions,
       tracking_ratio: trackingRatio,
@@ -392,7 +445,9 @@ export default function PracticePage() {
     try {
       const key = "recognition_feedback";
       const existing = JSON.parse(localStorage.getItem(key) || "[]") as unknown[];
-      localStorage.setItem(key, JSON.stringify([...existing.slice(-199), entry]));
+      const next = [...existing.slice(-199), entry];
+      localStorage.setItem(key, JSON.stringify(next));
+      setRecognitionFeedback(readRecognitionFeedback());
     } catch {
       // Feedback still gets sent as an analytics event below.
     }
@@ -452,9 +507,37 @@ export default function PracticePage() {
         </button>
         {practiceMode === "recognition" && (
           <span style={{ color: "var(--retry)", fontSize: "0.85rem" }}>
-            Experimental grading. Use guided self-check for learning.
+            Personalized with local correctness feedback after 3+ labels/sign.
           </span>
         )}
+      </div>
+
+      <div className="card" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
+        <strong>Order</strong>
+        <button
+          className={practiceOrder === "weak_first" ? "btn" : "btn btn-secondary"}
+          type="button"
+          aria-pressed={practiceOrder === "weak_first"}
+          onClick={() => updatePracticeOrder("weak_first")}
+        >
+          Weak first
+        </button>
+        <button
+          className={practiceOrder === "shuffle" ? "btn" : "btn btn-secondary"}
+          type="button"
+          aria-pressed={practiceOrder === "shuffle"}
+          onClick={() => updatePracticeOrder("shuffle")}
+        >
+          Mixed review
+        </button>
+        <button
+          className={practiceOrder === "default" ? "btn" : "btn btn-secondary"}
+          type="button"
+          aria-pressed={practiceOrder === "default"}
+          onClick={() => updatePracticeOrder("default")}
+        >
+          Catalog
+        </button>
       </div>
 
       {cameraError ? (

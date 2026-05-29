@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
-import { fetchMastery, fetchProgress, Mastery, ProgressSummary } from "../lib/api";
+import { fetchMastery, fetchProgress, fetchSigns, Mastery, ProgressSummary, type SignMeta } from "../lib/api";
+import { buildLearningPriorities, type LearningPriority } from "../lib/learningPlan";
+import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import {
   clearRecognitionFeedback,
   downloadText,
@@ -27,6 +29,8 @@ export default function ProgressPage() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
   const [recognitionFeedback, setRecognitionFeedback] = useState<RecognitionFeedbackEntry[]>([]);
+  const [signs, setSigns] = useState<SignMeta[]>([]);
+  const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +57,8 @@ export default function ProgressPage() {
 
   useEffect(() => {
     setRecognitionFeedback(readRecognitionFeedback());
+    fetchSigns(1).then(setSigns).catch(() => setSigns([]));
+    loadRecognitionCalibration().then(setCalibration).catch(() => setCalibration(null));
   }, []);
 
   // Sort mastery: mastered first, then by total_attempts desc.
@@ -67,6 +73,11 @@ export default function ProgressPage() {
     summary.total_attempts === 0 &&
     mastery.length === 0;
   const feedbackSummary = summarizeRecognitionFeedback(recognitionFeedback);
+  const learningPriorities: LearningPriority[] = buildLearningPriorities(signs, calibration, feedbackSummary).slice(0, 8);
+  const confusionRows = Object.entries(calibration?.confusions ?? {})
+    .map(([pair, row]) => ({ pair, ...row }))
+    .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
+    .slice(0, 8);
   const feedbackRows = Object.entries(feedbackSummary.bySign)
     .map(([signId, row]) => {
       const topPrediction =
@@ -253,6 +264,76 @@ export default function ProgressPage() {
                 </div>
               </>
             )}
+          </div>
+
+          <h2>Model diagnostics</h2>
+          <div className="card">
+            <p style={{ marginTop: 0 }}>
+              Model: <code>{calibration?.model_version ?? "unknown"}</code>
+              {typeof calibration?.accuracy === "number" && (
+                <span style={{ color: "var(--muted)" }}> - eval accuracy {(calibration.accuracy * 100).toFixed(1)}%</span>
+              )}
+            </p>
+            {learningPriorities.length > 0 && (
+              <>
+                <strong>Next signs to improve</strong>
+                <table className="compact-table">
+                  <thead>
+                    <tr>
+                      <th>Sign</th>
+                      <th>Reason</th>
+                      <th>F1</th>
+                      <th>Local misses</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {learningPriorities.map((row) => (
+                      <tr key={row.sign.sign_id}>
+                        <td>
+                          <code>{row.sign.sign_id}</code>
+                        </td>
+                        <td>{row.reasons.slice(0, 2).join(", ")}</td>
+                        <td>{typeof row.f1 === "number" ? `${Math.round(row.f1 * 100)}%` : "n/a"}</td>
+                        <td>{row.localTotal ? `${row.localWrong}/${row.localTotal}` : "none"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            {confusionRows.length > 0 && (
+              <>
+                <strong style={{ display: "block", marginTop: "1rem" }}>Common model confusions</strong>
+                <table className="compact-table">
+                  <thead>
+                    <tr>
+                      <th>Pair</th>
+                      <th>Count</th>
+                      <th>Hint</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {confusionRows.map((row) => (
+                      <tr key={row.pair}>
+                        <td>
+                          <code>{row.pair}</code>
+                        </td>
+                        <td>{row.count ?? 0}</td>
+                        <td>{row.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+            <div className="button-row">
+              <Link to="/practice" className="btn">
+                Practice weak signs
+              </Link>
+              <Link to="/capture" className="btn btn-secondary">
+                Capture more data
+              </Link>
+            </div>
           </div>
         </>
       )}

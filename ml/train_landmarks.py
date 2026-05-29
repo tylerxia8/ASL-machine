@@ -31,6 +31,8 @@ def main():
     parser.add_argument("--label-smoothing", type=float, default=0.02)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
     parser.add_argument("--min-feature-coverage", type=float, default=0.20)
+    parser.add_argument("--landmark-noise-std", type=float, default=0.01)
+    parser.add_argument("--landmark-dropout-prob", type=float, default=0.05)
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -45,6 +47,8 @@ def main():
         label_to_idx,
         Path(args.feature_dir),
         min_coverage=args.min_feature_coverage,
+        noise_std=args.landmark_noise_std,
+        dropout_prob=args.landmark_dropout_prob,
     )
     val_ds = HandLandmarkDataset(manifest_path, "val", label_to_idx, Path(args.feature_dir), augment=False)
     if not train_ds or not val_ds:
@@ -149,6 +153,8 @@ def main():
                     "max_grad_norm": args.max_grad_norm,
                     "pretrained_detector": "mediapipe_hands",
                     "min_feature_coverage": args.min_feature_coverage,
+                    "landmark_noise_std": args.landmark_noise_std,
+                    "landmark_dropout_prob": args.landmark_dropout_prob,
                 },
                 ckpt_dir / "best.pt",
             )
@@ -176,6 +182,8 @@ def main():
                 "params": n_params,
                 "pretrained_detector": "mediapipe_hands",
                 "min_feature_coverage": args.min_feature_coverage,
+                "landmark_noise_std": args.landmark_noise_std,
+                "landmark_dropout_prob": args.landmark_dropout_prob,
             },
             f,
             indent=2,
