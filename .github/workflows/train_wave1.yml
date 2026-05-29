@@ -74,6 +74,10 @@ on:
         description: "Gradient clipping norm; 0 disables clipping"
         type: string
         default: "1.0"
+      min_feature_coverage:
+        description: "Minimum hand-landmark frame coverage for training clips; 0 keeps all extracted clips"
+        type: string
+        default: "0.20"
       early_stop_patience:
         description: "Epochs without val improvement before stopping; 0 disables"
         type: number
@@ -329,6 +333,7 @@ jobs:
             --weight-decay ${{ inputs.weight_decay }} \
             --label-smoothing ${{ inputs.label_smoothing }} \
             --max-grad-norm ${{ inputs.max_grad_norm }} \
+            --min-feature-coverage ${{ inputs.min_feature_coverage }} \
             --early-stop-patience ${{ inputs.early_stop_patience }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
