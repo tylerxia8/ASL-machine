@@ -7,14 +7,14 @@ import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLan
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, getLabels, ModelUnavailableError, summarizeProbabilities } from "../lib/inference";
 import { confusionHint, loadRecognitionCalibration, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
-import { buildLearningPriorities } from "../lib/learningPlan";
+import { buildConfusionDrillSigns, buildLearningPriorities } from "../lib/learningPlan";
 import { personalizeThresholds } from "../lib/personalCalibration";
 import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 import { evaluateAttempt, EvalOutcome } from "../lib/threshold";
 
 type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
 type PracticeMode = "guided" | "recognition";
-type PracticeOrder = "weak_first" | "default" | "shuffle";
+type PracticeOrder = "weak_first" | "confusions" | "default" | "shuffle";
 type SignReference = { handshape: string; movement: string; location: string };
 
 const RECORD_MS = 2000;
@@ -34,7 +34,7 @@ function readPracticeMode(): PracticeMode {
 function readPracticeOrder(): PracticeOrder {
   try {
     const value = localStorage.getItem(PRACTICE_ORDER_KEY);
-    return value === "default" || value === "shuffle" ? value : "weak_first";
+    return value === "default" || value === "shuffle" || value === "confusions" ? value : "weak_first";
   } catch {
     return "weak_first";
   }
@@ -112,6 +112,7 @@ export default function PracticePage() {
   const orderedSigns = useMemo(() => {
     if (practiceOrder === "default") return signs;
     if (practiceOrder === "shuffle") return stableShuffle(signs);
+    if (practiceOrder === "confusions") return buildConfusionDrillSigns(signs, calibration);
     return buildLearningPriorities(signs, calibration, feedbackSummary).map((p) => p.sign);
   }, [calibration, feedbackSummary, practiceOrder, signs]);
   const current = orderedSigns[index];
@@ -529,6 +530,14 @@ export default function PracticePage() {
           onClick={() => updatePracticeOrder("shuffle")}
         >
           Mixed review
+        </button>
+        <button
+          className={practiceOrder === "confusions" ? "btn" : "btn btn-secondary"}
+          type="button"
+          aria-pressed={practiceOrder === "confusions"}
+          onClick={() => updatePracticeOrder("confusions")}
+        >
+          Confusion drill
         </button>
         <button
           className={practiceOrder === "default" ? "btn" : "btn btn-secondary"}

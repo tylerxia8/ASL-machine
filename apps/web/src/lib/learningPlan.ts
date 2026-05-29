@@ -61,3 +61,31 @@ export function buildLearningPriorities(
     })
     .sort((a, b) => b.score - a.score || a.sign.gloss.localeCompare(b.sign.gloss));
 }
+
+export function buildConfusionDrillSigns(signs: SignMeta[], calibration: RecognitionCalibration | null) {
+  const byId = new Map(signs.map((sign) => [sign.sign_id, sign]));
+  const seen = new Set<string>();
+  const out: SignMeta[] = [];
+  const rows = Object.entries(calibration?.confusions ?? {})
+    .map(([pair, row]) => {
+      const [prompt, predicted] = pair.split("->");
+      return { prompt, predicted, count: row.count ?? 0 };
+    })
+    .filter((row) => byId.has(row.prompt) && byId.has(row.predicted))
+    .sort((a, b) => b.count - a.count);
+
+  for (const row of rows) {
+    for (const signId of [row.prompt, row.predicted]) {
+      if (seen.has(signId)) continue;
+      const sign = byId.get(signId);
+      if (!sign) continue;
+      seen.add(signId);
+      out.push(sign);
+    }
+  }
+
+  for (const sign of signs) {
+    if (!seen.has(sign.sign_id)) out.push(sign);
+  }
+  return out;
+}

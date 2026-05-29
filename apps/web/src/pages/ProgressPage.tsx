@@ -266,77 +266,78 @@ export default function ProgressPage() {
             )}
           </div>
 
-          <h2>Model diagnostics</h2>
-          <div className="card">
-            <p style={{ marginTop: 0 }}>
-              Model: <code>{calibration?.model_version ?? "unknown"}</code>
-              {typeof calibration?.accuracy === "number" && (
-                <span style={{ color: "var(--muted)" }}> - eval accuracy {(calibration.accuracy * 100).toFixed(1)}%</span>
-              )}
-            </p>
-            {learningPriorities.length > 0 && (
-              <>
-                <strong>Next signs to improve</strong>
-                <table className="compact-table">
-                  <thead>
-                    <tr>
-                      <th>Sign</th>
-                      <th>Reason</th>
-                      <th>F1</th>
-                      <th>Local misses</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {learningPriorities.map((row) => (
-                      <tr key={row.sign.sign_id}>
-                        <td>
-                          <code>{row.sign.sign_id}</code>
-                        </td>
-                        <td>{row.reasons.slice(0, 2).join(", ")}</td>
-                        <td>{typeof row.f1 === "number" ? `${Math.round(row.f1 * 100)}%` : "n/a"}</td>
-                        <td>{row.localTotal ? `${row.localWrong}/${row.localTotal}` : "none"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            )}
-            {confusionRows.length > 0 && (
-              <>
-                <strong style={{ display: "block", marginTop: "1rem" }}>Common model confusions</strong>
-                <table className="compact-table">
-                  <thead>
-                    <tr>
-                      <th>Pair</th>
-                      <th>Count</th>
-                      <th>Hint</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {confusionRows.map((row) => (
-                      <tr key={row.pair}>
-                        <td>
-                          <code>{row.pair}</code>
-                        </td>
-                        <td>{row.count ?? 0}</td>
-                        <td>{row.message}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            )}
-            <div className="button-row">
-              <Link to="/practice" className="btn">
-                Practice weak signs
-              </Link>
-              <Link to="/capture" className="btn btn-secondary">
-                Capture more data
-              </Link>
-            </div>
-          </div>
         </>
       )}
+
+      <h2>Model diagnostics</h2>
+      <div className="card">
+        <p style={{ marginTop: 0 }}>
+          Model: <code>{calibration?.model_version ?? "unknown"}</code>
+          {typeof calibration?.accuracy === "number" && (
+            <span style={{ color: "var(--muted)" }}> - eval accuracy {(calibration.accuracy * 100).toFixed(1)}%</span>
+          )}
+        </p>
+        {learningPriorities.length > 0 && (
+          <>
+            <strong>Next signs to improve</strong>
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th>Sign</th>
+                  <th>Reason</th>
+                  <th>F1</th>
+                  <th>Local misses</th>
+                </tr>
+              </thead>
+              <tbody>
+                {learningPriorities.map((row) => (
+                  <tr key={row.sign.sign_id}>
+                    <td>
+                      <code>{row.sign.sign_id}</code>
+                    </td>
+                    <td>{row.reasons.slice(0, 2).join(", ")}</td>
+                    <td>{typeof row.f1 === "number" ? `${Math.round(row.f1 * 100)}%` : "n/a"}</td>
+                    <td>{row.localTotal ? `${row.localWrong}/${row.localTotal}` : "none"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        {confusionRows.length > 0 && (
+          <>
+            <strong style={{ display: "block", marginTop: "1rem" }}>Common model confusions</strong>
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th>Pair</th>
+                  <th>Count</th>
+                  <th>Hint</th>
+                </tr>
+              </thead>
+              <tbody>
+                {confusionRows.map((row) => (
+                  <tr key={row.pair}>
+                    <td>
+                      <code>{row.pair}</code>
+                    </td>
+                    <td>{row.count ?? 0}</td>
+                    <td>{row.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+        <div className="button-row">
+          <Link to="/practice" className="btn">
+            Practice weak signs
+          </Link>
+          <Link to="/capture" className="btn btn-secondary">
+            Capture more data
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
