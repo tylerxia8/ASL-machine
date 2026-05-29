@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "sync-model": "node scripts/sync-model.mjs",
+    "sync-references": "node scripts/sync-reference-clips.mjs",
     "test": "vitest run",
     "lint": "tsc --noEmit"
   },

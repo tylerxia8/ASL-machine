@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchHint, trackEvent, type HintResponse } from "../lib/api";
+import ReferenceVideo from "../components/ReferenceVideo";
 
 type Phrase = {
   id: string;
@@ -101,6 +102,7 @@ export default function PhrasePage() {
 
       <div className="card" style={{ marginTop: "1rem" }}>
         <strong>Current sign: <code>{currentSign}</code></strong>
+        <ReferenceVideo signId={currentSign} />
         {references[currentSign] ? (
           <div className="hint-panel">
             <p>

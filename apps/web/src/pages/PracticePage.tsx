@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
+import ReferenceVideo from "../components/ReferenceVideo";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
 import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
 import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
@@ -663,6 +664,7 @@ export default function PracticePage() {
             {showReference && reference && (
               <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
                 <strong>Reference</strong>
+                <ReferenceVideo signId={current.sign_id} />
                 <p style={{ margin: "0.25rem 0 0" }}>
                   Handshape: {reference.handshape}<br />
                   Movement: {reference.movement}<br />
