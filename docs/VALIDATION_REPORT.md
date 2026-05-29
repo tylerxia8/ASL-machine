@@ -90,8 +90,8 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 > This block is overwritten by `python ml/eval.py`. Edit the narrative
 > sections above/below; do not edit between these markers.
 
-**Model version:** `wave1-semlex-aslcitizen-v22-hand-landmarks`  
-**Test accuracy (clip-level, signer-disjoint):** 79.92%  
+**Model version:** `wave1-semlex-aslcitizen-v23-augmented-landmarks`  
+**Test accuracy (clip-level, signer-disjoint):** 81.04%  
 **Classes:** 25  
 **Checkpoint val accuracy:** 0.8897058823529411  
 **Confusion matrix shape:** 25×25
@@ -100,62 +100,62 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 
 | Sign | Precision | Recall | F1 | Support |
 |------|-----------|--------|------|---------|
-| deaf | 0.63 | 0.75 | 0.69 | 61 |
-| eat | 0.87 | 0.91 | 0.89 | 332 |
+| deaf | 0.70 | 0.61 | 0.65 | 61 |
+| eat | 0.91 | 0.92 | 0.91 | 332 |
 | five | 0.00 | 0.00 | 0.00 | 1 |
 | four | 0.00 | 0.00 | 0.00 | 2 |
-| friend | 0.85 | 0.88 | 0.86 | 68 |
-| goodbye | 0.33 | 0.82 | 0.47 | 11 |
-| hello | 0.83 | 0.75 | 0.79 | 20 |
-| help | 0.89 | 0.62 | 0.73 | 88 |
-| how | 0.24 | 0.69 | 0.35 | 13 |
-| meet | 0.90 | 0.58 | 0.71 | 31 |
-| name | 0.95 | 0.77 | 0.85 | 48 |
-| nice | 0.80 | 0.92 | 0.85 | 60 |
-| no | 0.84 | 0.68 | 0.75 | 38 |
-| one | 0.80 | 0.80 | 0.80 | 35 |
-| please | 0.67 | 0.77 | 0.71 | 13 |
-| sleep | 0.98 | 0.55 | 0.70 | 93 |
-| sorry | 0.94 | 0.97 | 0.95 | 32 |
-| thank_you | 0.63 | 0.85 | 0.72 | 20 |
-| three | 0.41 | 0.90 | 0.56 | 10 |
-| two | 1.00 | 0.26 | 0.41 | 27 |
+| friend | 0.91 | 0.87 | 0.89 | 68 |
+| goodbye | 0.34 | 1.00 | 0.51 | 11 |
+| hello | 0.89 | 0.85 | 0.87 | 20 |
+| help | 0.95 | 0.65 | 0.77 | 88 |
+| how | 0.28 | 0.69 | 0.40 | 13 |
+| meet | 1.00 | 0.65 | 0.78 | 31 |
+| name | 1.00 | 0.88 | 0.93 | 48 |
+| nice | 0.77 | 0.85 | 0.81 | 60 |
+| no | 0.78 | 0.66 | 0.71 | 38 |
+| one | 0.90 | 0.80 | 0.85 | 35 |
+| please | 0.50 | 0.77 | 0.61 | 13 |
+| sleep | 0.81 | 0.66 | 0.73 | 93 |
+| sorry | 0.91 | 0.91 | 0.91 | 32 |
+| thank_you | 0.54 | 0.95 | 0.69 | 20 |
+| three | 0.45 | 0.90 | 0.60 | 10 |
+| two | 1.00 | 0.44 | 0.62 | 27 |
 | water | 0.98 | 0.98 | 0.98 | 204 |
-| what | 0.86 | 0.65 | 0.74 | 46 |
-| where | 0.79 | 0.80 | 0.80 | 81 |
-| who | 0.68 | 0.53 | 0.59 | 51 |
-| yes | 0.54 | 0.82 | 0.65 | 34 |
-| **macro avg** | 0.70 | 0.69 | 0.66 | 1419 |
+| what | 0.80 | 0.70 | 0.74 | 46 |
+| where | 0.71 | 0.83 | 0.76 | 81 |
+| who | 0.47 | 0.51 | 0.49 | 51 |
+| yes | 0.60 | 0.74 | 0.66 | 34 |
+| **macro avg** | 0.69 | 0.71 | 0.67 | 1419 |
 
 ### Most-confused pairs (top 10)
 
 | True → | Predicted | Count |
 |--------|-----------|-------|
-| sleep | eat | 30 |
-| two | three | 12 |
-| help | how | 11 |
-| who | yes | 9 |
-| help | who | 8 |
-| eat | four | 8 |
-| help | nice | 7 |
-| who | where | 6 |
-| who | deaf | 6 |
-| sleep | four | 6 |
+| sleep | eat | 21 |
+| help | how | 15 |
+| who | where | 12 |
+| eat | sleep | 11 |
+| deaf | where | 11 |
+| help | nice | 9 |
+| deaf | who | 8 |
+| who | yes | 7 |
+| two | three | 7 |
+| who | deaf | 5 |
 
 ### Confidence calibration
 
 | Confidence | Clips | Correct | Accuracy |
 |------------|-------|---------|----------|
 | 0.0-0.1 | 0 | 0 | n/a |
-| 0.1-0.2 | 4 | 1 | 25.00% |
-| 0.2-0.3 | 27 | 3 | 11.11% |
-| 0.3-0.4 | 57 | 18 | 31.58% |
-| 0.4-0.5 | 59 | 25 | 42.37% |
-| 0.5-0.6 | 91 | 43 | 47.25% |
-| 0.6-0.7 | 80 | 43 | 53.75% |
-| 0.7-0.8 | 78 | 48 | 61.54% |
-| 0.8-0.9 | 132 | 96 | 72.73% |
-| 0.9-1.0 | 891 | 857 | 96.18% |
+| 0.1-0.2 | 8 | 1 | 12.50% |
+| 0.2-0.3 | 36 | 10 | 27.78% |
+| 0.3-0.4 | 45 | 8 | 17.78% |
+| 0.4-0.5 | 60 | 26 | 43.33% |
+| 0.5-0.6 | 66 | 37 | 56.06% |
+| 0.6-0.7 | 82 | 50 | 60.98% |
+| 0.7-0.8 | 80 | 52 | 65.00% |
+| 0.8-0.9 | 109 | 77 | 70.64% |
+| 0.9-1.0 | 933 | 889 | 95.28% |
 
 <!-- AUTO-METRICS:END -->
 
