@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/api";
 import { requestCamera, recordVideo, CameraError } from "../lib/camera";
+import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
+import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 
 const TARGET_PER_SIGN = 30;
 const MIN_PER_SIGN = 10;
@@ -10,6 +12,7 @@ const COUNTDOWN_MS = 3000;
 const INCOMING_REL = "ml\\data\\incoming";
 
 type Phase = "idle" | "countdown" | "recording" | "saving";
+type CaptureOrder = "weak_first" | "fewest_clips" | "default";
 
 const PHASE_LABELS: Record<Phase, string> = {
   idle: `Record ${RECORD_MS / 1000}s clip`,
@@ -39,8 +42,27 @@ export default function CapturePage() {
   const lastDownloadUrlRef = useRef<string | null>(null);
   const [lastClip, setLastClip] = useState<{ filename: string; url: string; sizeKB: number } | null>(null);
   const [reference, setReference] = useState<HintResponse | null>(null);
+  const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
+  const [captureOrder, setCaptureOrder] = useState<CaptureOrder>("weak_first");
 
-  const current = signs[index];
+  const feedbackSummary = useMemo(() => summarizeRecognitionFeedback(readRecognitionFeedback()), []);
+
+  const orderedSigns = useMemo(() => {
+    const score = (sign: SignMeta) => {
+      const threshold = calibration?.thresholds?.[sign.sign_id];
+      const feedback = feedbackSummary.bySign[sign.sign_id];
+      const f1 = threshold?.f1 ?? 1;
+      const support = threshold?.support ?? 999;
+      const rejected = feedback?.rejected ?? 0;
+      const count = counts[sign.sign_id] ?? 0;
+      if (captureOrder === "fewest_clips") return count * 1000 + f1 * 100 - rejected;
+      if (captureOrder === "default") return signs.findIndex((s) => s.sign_id === sign.sign_id);
+      return f1 * 1000 + Math.min(support, 30) * 5 + count * 20 - rejected * 60;
+    };
+    return [...signs].sort((a, b) => score(a) - score(b) || a.gloss.localeCompare(b.gloss));
+  }, [calibration, captureOrder, counts, feedbackSummary.bySign, signs]);
+
+  const current = orderedSigns[index];
 
   useEffect(() => {
     if (!current) return;
@@ -54,6 +76,9 @@ export default function CapturePage() {
     fetchSigns(1)
       .then((s) => setSigns(s))
       .catch(() => setStatus("Failed to load trained sign list from API."));
+    loadRecognitionCalibration()
+      .then(setCalibration)
+      .catch(() => setCalibration(null));
   }, []);
 
   useEffect(() => {
@@ -130,7 +155,7 @@ export default function CapturePage() {
     setStatus(`Saved ${filename} (${(blob.size / 1024).toFixed(0)} KB) to Downloads. Review below.`);
     setPhase("idle");
 
-    if (nextCount >= TARGET_PER_SIGN && index < signs.length - 1) {
+    if (nextCount >= TARGET_PER_SIGN && index < orderedSigns.length - 1) {
       setIndex(index + 1);
     }
   };
@@ -155,6 +180,8 @@ export default function CapturePage() {
   const recording = phase === "recording";
   const countingDown = phase === "countdown";
   const busy = recording || countingDown || phase === "saving";
+  const currentThreshold = current ? calibration?.thresholds?.[current.sign_id] : null;
+  const currentFeedback = current ? feedbackSummary.bySign[current.sign_id] : null;
 
   if (signs.length === 0) {
     return (
@@ -201,6 +228,30 @@ export default function CapturePage() {
           <strong>{progress.totalClips}</strong> clips · {" "}
           <strong>{progress.minDone}</strong>/{progress.total} at {MIN_PER_SIGN}+ · {" "}
           <strong>{progress.done}</strong>/{progress.total} at {TARGET_PER_SIGN}+
+        </span>
+      </div>
+
+      <div className="card" style={{ marginBottom: "1rem", display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap" }}>
+        <label htmlFor="capture-order">
+          <strong>Capture order:</strong>
+        </label>
+        <select
+          id="capture-order"
+          className="input"
+          style={{ width: "13rem", marginBottom: 0 }}
+          value={captureOrder}
+          onChange={(e) => {
+            setCaptureOrder(e.target.value as CaptureOrder);
+            setIndex(0);
+          }}
+          disabled={busy}
+        >
+          <option value="weak_first">Weak signs first</option>
+          <option value="fewest_clips">Fewest clips first</option>
+          <option value="default">Default sign order</option>
+        </select>
+        <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>
+          Weak-sign order uses release metrics, local feedback, and current clip counts.
         </span>
       </div>
 
@@ -262,12 +313,27 @@ export default function CapturePage() {
 
       <div className="card" style={{ marginTop: "1rem" }}>
         <p style={{ fontSize: "1.25rem", margin: 0 }}>
-          Sign {index + 1}/{signs.length}: <strong>{current.gloss}</strong>{" "}
+          Sign {index + 1}/{orderedSigns.length}: <strong>{current.gloss}</strong>{" "}
           <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>({current.sign_id})</span>
         </p>
         <p style={{ marginTop: "0.25rem" }}>
           Clips this sign: <strong>{counts[current.sign_id] ?? 0}</strong> / {TARGET_PER_SIGN}
         </p>
+        {(currentThreshold || currentFeedback) && (
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
+            {currentThreshold && (
+              <>
+                Model F1 {(((currentThreshold.f1 ?? 0) * 100)).toFixed(0)}% with{" "}
+                {currentThreshold.support ?? 0} test clips.
+              </>
+            )}{" "}
+            {currentFeedback && (
+              <>
+                Learner feedback: {currentFeedback.rejected}/{currentFeedback.total} marked wrong.
+              </>
+            )}
+          </p>
+        )}
         {reference && (
           <div className="hint-panel" style={{ marginTop: "0.5rem" }}>
             <strong>Reference (perform this exact form)</strong>
@@ -294,7 +360,7 @@ export default function CapturePage() {
           </button>
           <button
             className="btn btn-secondary"
-            disabled={index >= signs.length - 1 || busy}
+            disabled={index >= orderedSigns.length - 1 || busy}
             onClick={() => setIndex(index + 1)}
           >
             Next sign

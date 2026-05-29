@@ -2,6 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchMastery, fetchProgress, Mastery, ProgressSummary } from "../lib/api";
+import {
+  clearRecognitionFeedback,
+  downloadText,
+  readRecognitionFeedback,
+  recognitionFeedbackCsv,
+  summarizeRecognitionFeedback,
+  type RecognitionFeedbackEntry,
+} from "../lib/recognitionFeedback";
 
 type LoadState = "loading" | "loaded" | "error";
 
@@ -18,6 +26,7 @@ export default function ProgressPage() {
   const [mastery, setMastery] = useState<Mastery[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
+  const [recognitionFeedback, setRecognitionFeedback] = useState<RecognitionFeedbackEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +51,10 @@ export default function ProgressPage() {
     };
   }, [userId, auth.session]);
 
+  useEffect(() => {
+    setRecognitionFeedback(readRecognitionFeedback());
+  }, []);
+
   // Sort mastery: mastered first, then by total_attempts desc.
   const sortedMastery = [...mastery].sort((a, b) => {
     if (a.mastered !== b.mastered) return a.mastered ? -1 : 1;
@@ -53,6 +66,32 @@ export default function ProgressPage() {
     summary !== null &&
     summary.total_attempts === 0 &&
     mastery.length === 0;
+  const feedbackSummary = summarizeRecognitionFeedback(recognitionFeedback);
+  const feedbackRows = Object.entries(feedbackSummary.bySign)
+    .map(([signId, row]) => {
+      const topPrediction =
+        Object.entries(row.commonPredictions).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "unknown";
+      return { signId, ...row, topPrediction };
+    })
+    .sort((a, b) => b.rejected - a.rejected || b.total - a.total)
+    .slice(0, 8);
+
+  const exportFeedback = (format: "csv" | "json") => {
+    if (format === "csv") {
+      downloadText("recognition_feedback.csv", recognitionFeedbackCsv(recognitionFeedback), "text/csv");
+      return;
+    }
+    downloadText(
+      "recognition_feedback.json",
+      JSON.stringify(recognitionFeedback, null, 2),
+      "application/json"
+    );
+  };
+
+  const resetFeedback = () => {
+    clearRecognitionFeedback();
+    setRecognitionFeedback([]);
+  };
 
   return (
     <div className="container">
@@ -161,6 +200,60 @@ export default function ProgressPage() {
               </li>
             ))}
           </ul>
+
+          <h2>Recognition feedback</h2>
+          <div className="card">
+            {feedbackSummary.total === 0 ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                No model feedback yet. Use recognition mode and answer the correctness prompt after each result.
+              </p>
+            ) : (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  <strong>{feedbackSummary.total}</strong> labeled model results -{" "}
+                  <span className="status-pass">{feedbackSummary.accepted} right</span> /{" "}
+                  <span className="status-fail">{feedbackSummary.rejected} wrong</span>
+                </p>
+                {feedbackRows.length > 0 && (
+                  <table className="compact-table">
+                    <thead>
+                      <tr>
+                        <th>Sign</th>
+                        <th>Votes</th>
+                        <th>Wrong</th>
+                        <th>Top prediction</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {feedbackRows.map((row) => (
+                        <tr key={row.signId}>
+                          <td>
+                            <code>{row.signId}</code>
+                          </td>
+                          <td>{row.total}</td>
+                          <td>{row.rejected}</td>
+                          <td>
+                            <code>{row.topPrediction}</code>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                <div className="button-row">
+                  <button className="btn btn-secondary" onClick={() => exportFeedback("csv")}>
+                    Export CSV
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => exportFeedback("json")}>
+                    Export JSON
+                  </button>
+                  <button className="btn btn-secondary" onClick={resetFeedback}>
+                    Clear feedback
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </>
       )}
     </div>

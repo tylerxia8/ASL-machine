@@ -17,6 +17,19 @@
    - If you flubbed the take, click **Undo last** and the page tells you which file to delete from Downloads.
 5. Page auto-advances when a sign reaches **30 clips**. Use **Next sign** / **Previous sign** to navigate manually.
 
+## Target weak signs first
+
+The capture page now has a **Capture order** dropdown. Keep it on **Weak signs first** unless you are deliberately filling every class evenly. That order combines release metrics, local recognition feedback, and current clip counts so the next recordings help the weakest signs first.
+
+After any model run, generate a ranked recording plan:
+
+```powershell
+cd "c:\Users\tyler\Downloads\Gauntlet Superbuilders ASL"
+.\ml\.venv\Scripts\python.exe ml\scripts\build_capture_plan.py
+```
+
+The plan is written to `docs\CAPTURE_PLAN.md`. It combines `eval_metrics.json` with learner clips already in `ml\data\learner_samples\` and `ml\data\incoming\`, then lists the signs that need more examples first.
+
 ## Move files into the project
 
 **Option A — PowerShell (easiest)**

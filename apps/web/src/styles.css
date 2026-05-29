@@ -122,6 +122,31 @@ a {
   border-radius: 8px;
 }
 
+.compact-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.compact-table th,
+.compact-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.compact-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
 .footer-meta {
   font-size: 0.75rem;
   color: var(--muted);
