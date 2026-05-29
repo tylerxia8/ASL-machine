@@ -6,6 +6,8 @@ import PracticePage from "./pages/PracticePage";
 import ProgressPage from "./pages/ProgressPage";
 import CapturePage from "./pages/CapturePage";
 import DryRunPage from "./pages/DryRunPage";
+import PhrasePage from "./pages/PhrasePage";
+import ReviewCapturesPage from "./pages/ReviewCapturesPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
@@ -26,6 +28,8 @@ export default function App() {
             <NavLink to="/lobby">Practice</NavLink>
             <NavLink to="/progress">Progress</NavLink>
             <NavLink to="/capture">Capture</NavLink>
+            <NavLink to="/review-captures">Review</NavLink>
+            <NavLink to="/phrases">Phrases</NavLink>
             <NavLink to="/dry-run">Dry run</NavLink>
             <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: "0.85rem" }}>
               {user?.email ?? `Dev: ${devUserId.slice(0, 12)}`}
@@ -67,6 +71,22 @@ export default function App() {
           element={
             <Protected>
               <CapturePage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/review-captures"
+          element={
+            <Protected>
+              <ReviewCapturesPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/phrases"
+          element={
+            <Protected>
+              <PhrasePage />
             </Protected>
           }
         />

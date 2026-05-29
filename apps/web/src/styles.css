@@ -147,6 +147,19 @@ a {
   margin-top: 1rem;
 }
 
+.phrase-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
 .footer-meta {
   font-size: 0.75rem;
   color: var(--muted);

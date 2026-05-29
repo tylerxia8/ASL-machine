@@ -70,11 +70,12 @@ export default function LobbyPage() {
     window.location.reload();
   };
 
-  const startSession = async (wave: number) => {
+  const startSession = async (wave: number, order?: "weak_first" | "confusions" | "shuffle" | "default") => {
     const sess = await createSession(userId, auth.session?.access_token);
     sessionStorage.setItem("practice_wave", String(wave));
     sessionStorage.setItem("practice_session_id", sess.id);
     sessionStorage.removeItem("session_log");
+    if (order) localStorage.setItem("practice_order", order);
     window.location.href = "/practice";
   };
 
@@ -136,6 +137,26 @@ export default function LobbyPage() {
           <Link to="/progress">View full history {"->"}</Link>
         </div>
       )}
+      <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--retry)" }}>
+        <strong>Improve the model</strong>
+        <p style={{ color: "var(--muted)" }}>
+          Jump straight into weak-sign practice, drill known confusions, or capture new clips for retraining.
+        </p>
+        <div className="button-row">
+          <button className="btn" onClick={() => startSession(1, "weak_first")} disabled={apiOk === false}>
+            Fix weak signs
+          </button>
+          <button className="btn btn-secondary" onClick={() => startSession(1, "confusions")} disabled={apiOk === false}>
+            Drill confusions
+          </button>
+          <Link to="/capture" className="btn btn-secondary">
+            Capture training clips
+          </Link>
+          <Link to="/review-captures" className="btn btn-secondary">
+            Review captures
+          </Link>
+        </div>
+      </div>
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
         <div className="card" style={{ outline: "2px solid var(--accent)" }}>
           <h3>Wave 1 - Recommended</h3>
@@ -150,6 +171,13 @@ export default function LobbyPage() {
           <button className="btn btn-secondary" onClick={() => startSession(99)} disabled={apiOk === false}>
             Start session
           </button>
+        </div>
+        <div className="card">
+          <h3>Phrase mode</h3>
+          <p>Practice short prompted sequences built from trained Wave 1 signs</p>
+          <Link to="/phrases" className="btn btn-secondary">
+            Start phrases
+          </Link>
         </div>
       </div>
       <p className="footer-meta" style={{ marginTop: "2rem" }}>

@@ -4,7 +4,7 @@ import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/
 import { requestCamera, recordVideo, CameraError } from "../lib/camera";
 import { buildLearningPriorities } from "../lib/learningPlan";
 import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
-import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
+import { downloadText, readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 
 const TARGET_PER_SIGN = 30;
 const MIN_PER_SIGN = 10;
@@ -14,6 +14,14 @@ const INCOMING_REL = "ml\\data\\incoming";
 
 type Phase = "idle" | "countdown" | "recording" | "saving";
 type CaptureOrder = "weak_first" | "fewest_clips" | "default";
+type CapturedClip = {
+  filename: string;
+  sign_id: string;
+  gloss: string;
+  signer_id: string;
+  size_kb: number;
+  captured_at: string;
+};
 
 const PHASE_LABELS: Record<Phase, string> = {
   idle: `Record ${RECORD_MS / 1000}s clip`,
@@ -45,6 +53,7 @@ export default function CapturePage() {
   const [reference, setReference] = useState<HintResponse | null>(null);
   const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
   const [captureOrder, setCaptureOrder] = useState<CaptureOrder>("weak_first");
+  const [capturedClips, setCapturedClips] = useState<CapturedClip[]>([]);
 
   const feedbackSummary = useMemo(() => summarizeRecognitionFeedback(readRecognitionFeedback()), []);
 
@@ -147,6 +156,17 @@ export default function CapturePage() {
     const nextCount = (counts[current.sign_id] ?? 0) + 1;
     const updated = { ...counts, [current.sign_id]: nextCount };
     setCounts(updated);
+    setCapturedClips((clips) => [
+      ...clips,
+      {
+        filename,
+        sign_id: current.sign_id,
+        gloss: current.gloss,
+        signer_id: signerId,
+        size_kb: Math.round(blob.size / 1024),
+        captured_at: new Date().toISOString(),
+      },
+    ]);
     localStorage.setItem(`capture_counts_${signerId}`, JSON.stringify(updated));
     setStatus(`Saved ${filename} (${(blob.size / 1024).toFixed(0)} KB) to Downloads. Review below.`);
     setPhase("idle");
@@ -154,6 +174,21 @@ export default function CapturePage() {
     if (nextCount >= TARGET_PER_SIGN && index < orderedSigns.length - 1) {
       setIndex(index + 1);
     }
+  };
+
+  const exportSessionManifest = () => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      incoming_dir: INCOMING_REL,
+      signer_id: signerId,
+      clips: capturedClips,
+      counts,
+    };
+    downloadText(
+      `capture_session_${signerId}_${Date.now()}.json`,
+      JSON.stringify(payload, null, 2),
+      "application/json"
+    );
   };
 
   const undoLast = () => {
@@ -361,6 +396,9 @@ export default function CapturePage() {
           >
             Next sign
           </button>
+          <button className="btn btn-secondary" disabled={capturedClips.length === 0 || busy} onClick={exportSessionManifest}>
+            Export manifest
+          </button>
         </div>
         {status && <p style={{ marginTop: "0.75rem", color: "var(--muted)", fontSize: "0.9rem" }}>{status}</p>}
       </div>
@@ -383,6 +421,35 @@ export default function CapturePage() {
             Looks good? Hit <strong>Record</strong> again. Bad take? <strong>Undo last</strong> decrements the count;
             delete the file from your Downloads folder.
           </p>
+        </div>
+      )}
+
+      {capturedClips.length > 0 && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <strong>Session bundle</strong>
+          <p style={{ color: "var(--muted)", fontSize: "0.85rem", margin: "0.25rem 0" }}>
+            {capturedClips.length} clips recorded this session. Export the manifest after moving videos into <code>{INCOMING_REL}</code>.
+          </p>
+          <table className="compact-table">
+            <thead>
+              <tr>
+                <th>Sign</th>
+                <th>File</th>
+                <th>Size</th>
+              </tr>
+            </thead>
+            <tbody>
+              {capturedClips.slice(-8).map((clip) => (
+                <tr key={clip.filename}>
+                  <td>
+                    <code>{clip.sign_id}</code>
+                  </td>
+                  <td>{clip.filename}</td>
+                  <td>{clip.size_kb} KB</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
