@@ -30,6 +30,7 @@ def main():
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--label-smoothing", type=float, default=0.02)
     parser.add_argument("--max-grad-norm", type=float, default=1.0)
+    parser.add_argument("--min-feature-coverage", type=float, default=0.20)
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -38,7 +39,13 @@ def main():
     sign_ids = sorted(set(manifest.get("sign_ids", [])) or {c["sign_id"] for c in manifest["clips"]})
     label_to_idx = {s: i for i, s in enumerate(sign_ids)}
 
-    train_ds = HandLandmarkDataset(manifest_path, "train", label_to_idx, Path(args.feature_dir))
+    train_ds = HandLandmarkDataset(
+        manifest_path,
+        "train",
+        label_to_idx,
+        Path(args.feature_dir),
+        min_coverage=args.min_feature_coverage,
+    )
     val_ds = HandLandmarkDataset(manifest_path, "val", label_to_idx, Path(args.feature_dir), augment=False)
     if not train_ds or not val_ds:
         raise SystemExit(
@@ -60,6 +67,11 @@ def main():
         print(
             "Dropped clips without extracted hand-landmark features: "
             f"{dropped} ({train_ds.missing_features_count} train, {val_ds.missing_features_count} val)"
+        )
+    if train_ds.low_coverage_count:
+        print(
+            "Dropped low-coverage training clips: "
+            f"{train_ds.low_coverage_count} below {args.min_feature_coverage:.0%} hand-tracking coverage"
         )
     print(f"Input: hand_landmarks ({HAND_FEATURES} features x {NUM_FRAMES} frames)")
 
@@ -136,6 +148,7 @@ def main():
                     "label_smoothing": args.label_smoothing,
                     "max_grad_norm": args.max_grad_norm,
                     "pretrained_detector": "mediapipe_hands",
+                    "min_feature_coverage": args.min_feature_coverage,
                 },
                 ckpt_dir / "best.pt",
             )
@@ -162,6 +175,7 @@ def main():
                 "num_frames": NUM_FRAMES,
                 "params": n_params,
                 "pretrained_detector": "mediapipe_hands",
+                "min_feature_coverage": args.min_feature_coverage,
             },
             f,
             indent=2,

@@ -137,8 +137,8 @@ def create_landmarker(model_path: Path, min_detection_confidence: float):
         running_mode=vision.RunningMode.VIDEO,
         num_hands=2,
         min_hand_detection_confidence=min_detection_confidence,
-        min_hand_presence_confidence=0.35,
-        min_tracking_confidence=0.40,
+        min_hand_presence_confidence=0.25,
+        min_tracking_confidence=0.30,
     )
     return mp, vision.HandLandmarker.create_from_options(options)
 
@@ -157,7 +157,7 @@ def main() -> int:
     parser.add_argument("--manifest", default=str(ROOT / "ml" / "data" / "manifest.json"))
     parser.add_argument("--out-dir", default=str(ROOT / "ml" / "data" / "hand_landmarks"))
     parser.add_argument("--prefer-source-video", action="store_true", default=True)
-    parser.add_argument("--min-detection-confidence", type=float, default=0.35)
+    parser.add_argument("--min-detection-confidence", type=float, default=0.25)
     parser.add_argument("--hand-model", default=str(DEFAULT_MODEL_PATH))
     args = parser.parse_args()
 
