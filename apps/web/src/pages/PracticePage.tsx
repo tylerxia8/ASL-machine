@@ -3,9 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
 import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
-import { captureHandLandmarkTensor } from "../lib/handLandmarks";
-
-const RECORD_MS = 2000;
+import { captureHandLandmarkSample } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, getLabels, ModelUnavailableError } from "../lib/inference";
 import { evaluateAttempt, EvalOutcome } from "../lib/threshold";
@@ -14,6 +12,8 @@ type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
 type PracticeMode = "guided" | "recognition";
 type SignReference = { handshape: string; movement: string; location: string };
 
+const RECORD_MS = 2000;
+const MIN_HAND_TRACKING_RATIO = 0.35;
 const PRACTICE_MODE_KEY = "practice_mode";
 
 function readPracticeMode(): PracticeMode {
@@ -51,6 +51,8 @@ export default function PracticePage() {
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(readPracticeMode);
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
+  const [topPredictions, setTopPredictions] = useState<{ label: string; confidence: number }[]>([]);
+  const [trackingRatio, setTrackingRatio] = useState<number | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [modelVersion, setModelVersion] = useState("");
   const [modelError, setModelError] = useState<string | null>(null);
@@ -157,6 +159,8 @@ export default function PracticePage() {
     setOutcome(null);
     setHint(null);
     setPredicted("");
+    setTopPredictions([]);
+    setTrackingRatio(null);
     setConfidence(0);
   };
 
@@ -166,6 +170,8 @@ export default function PracticePage() {
       setOutcome(null);
       setConfidence(0);
       setPredicted("");
+      setTopPredictions([]);
+      setTrackingRatio(null);
       setHint(null);
       setPhase("selfCheck");
     }, RECORD_MS);
@@ -214,11 +220,29 @@ export default function PracticePage() {
     const captureFrameCount = meta?.num_frames ?? 24;
     const modelT = meta?.num_frames ?? 8;
     const modelSz = meta?.frame_size ?? 32;
-    setPhase("evaluating");
     try {
       let modelInput: Float32Array;
       if (meta?.input_type === "hand_landmarks") {
-        modelInput = await captureHandLandmarkTensor(videoRef.current, captureFrameCount, RECORD_MS);
+        const sample = await captureHandLandmarkSample(videoRef.current, captureFrameCount, RECORD_MS);
+        modelInput = sample.tensor;
+        setTrackingRatio(sample.detectedFrameRatio);
+        if (sample.detectedFrameRatio < MIN_HAND_TRACKING_RATIO) {
+          const ratioPct = Math.round(sample.detectedFrameRatio * 100);
+          setOutcome("fail");
+          setConfidence(0);
+          setPredicted("low_tracking");
+          setTopPredictions([]);
+          setHint(
+            `I only tracked hands in ${ratioPct}% of the capture. Move closer, keep both hands inside the guide box, and try again with brighter lighting.`
+          );
+          try {
+            await saveOutcome("fail", undefined, "low_tracking", "model");
+          } catch (err) {
+            trackEvent("attempt_record_error", { error: String(err), source: "model" });
+          }
+          setPhase("result");
+          return;
+        }
       } else {
         const rawFrames = await captureFramesAsync(
           videoRef.current,
@@ -232,11 +256,13 @@ export default function PracticePage() {
             ? downsampleForModel(rawFrames, modelT, modelSz, modelSz)
             : framesToTensor(rawFrames, captureFrameCount, captureSz, captureSz);
       }
-      const { predictedLabel, confidence: conf } = await runInference(modelInput);
+      setPhase("evaluating");
+      const { predictedLabel, confidence: conf, topPredictions: top } = await runInference(modelInput);
       const result = evaluateAttempt(current.sign_id, predictedLabel, conf);
       setOutcome(result.outcome);
       setConfidence(result.confidence);
       setPredicted(predictedLabel);
+      setTopPredictions(top);
 
       const hintReason =
         result.outcome === "retry" ? "framing" : result.outcome === "fail" ? "fail" : "pass";
@@ -247,10 +273,18 @@ export default function PracticePage() {
         setHint(null);
       }
 
-      await saveOutcome(result.outcome, conf, predictedLabel, "model");
+      try {
+        await saveOutcome(result.outcome, conf, predictedLabel, "model");
+      } catch (err) {
+        trackEvent("attempt_record_error", { error: String(err), source: "model" });
+      }
       setPhase("result");
     } catch (err) {
       setOutcome("fail");
+      setConfidence(0);
+      setPredicted("");
+      setTopPredictions([]);
+      setTrackingRatio(null);
       setHint("Model could not run. Ensure model files are synced and reload.");
       setPhase("result");
       trackEvent("inference_error", { error: String(err) });
@@ -267,6 +301,8 @@ export default function PracticePage() {
   const nextSign = () => {
     setOutcome(null);
     setHint(null);
+    setTopPredictions([]);
+    setTrackingRatio(null);
     setPhase("prompt");
     if (index + 1 < signs.length) setIndex(index + 1);
     else setIndex(0);
@@ -428,7 +464,7 @@ export default function PracticePage() {
             )}
           </>
         )}
-        {phase === "recording" && <p>Recording… hold your sign.</p>}
+        {phase === "recording" && <p>Recording... keep your hands visible inside the guide box.</p>}
         {phase === "selfCheck" && (
           <>
             <p>Compare your sign with the reference, then log the attempt.</p>
@@ -452,15 +488,34 @@ export default function PracticePage() {
             </div>
           </>
         )}
-        {phase === "evaluating" && <p>Evaluating locally…</p>}
+        {phase === "evaluating" && <p>Evaluating locally...</p>}
         {phase === "result" && outcome && (
           <>
             <p className={`status-${outcome}`} style={{ fontSize: "1.25rem", fontWeight: 600 }}>
               {outcome === "pass" ? "Pass" : outcome === "retry" ? "Needs practice" : "Fail"}
-              {practiceMode === "recognition" && outcome !== "pass" && ` — ${(confidence * 100).toFixed(0)}% confidence`}
+              {practiceMode === "recognition" && predicted !== "low_tracking" && outcome !== "pass" && ` - ${(confidence * 100).toFixed(0)}% confidence`}
             </p>
-            {practiceMode === "recognition" && predicted && outcome !== "pass" && (
-              <p style={{ color: "var(--muted)" }}>Detected: {predicted}</p>
+            {practiceMode === "recognition" && predicted && predicted !== "low_tracking" && (
+              <p style={{ color: "var(--muted)" }}>
+                Detected: {predicted} ({(confidence * 100).toFixed(0)}%)
+              </p>
+            )}
+            {practiceMode === "recognition" && trackingRatio !== null && (
+              <p style={{ color: "var(--muted)" }}>
+                Hand tracking: {Math.round(trackingRatio * 100)}% of frames
+              </p>
+            )}
+            {practiceMode === "recognition" && topPredictions.length > 0 && (
+              <div style={{ marginTop: "0.5rem" }}>
+                <strong>Top matches</strong>
+                <ol style={{ margin: "0.35rem 0 0", paddingLeft: "1.4rem" }}>
+                  {topPredictions.map((p) => (
+                    <li key={p.label}>
+                      {p.label}: {(p.confidence * 100).toFixed(0)}%
+                    </li>
+                  ))}
+                </ol>
+              </div>
             )}
             {hint && (
               <div className="hint-panel">
@@ -470,7 +525,16 @@ export default function PracticePage() {
             )}
             <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
               {outcome !== "pass" && (
-                <button className="btn" onClick={() => { setPhase("prompt"); setOutcome(null); setHint(null); }}>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    setPhase("prompt");
+                    setOutcome(null);
+                    setHint(null);
+                    setTopPredictions([]);
+                    setTrackingRatio(null);
+                  }}
+                >
                   Retry
                 </button>
               )}

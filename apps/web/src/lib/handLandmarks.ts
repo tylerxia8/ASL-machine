@@ -8,6 +8,12 @@ const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/w
 
 let landmarkerPromise: Promise<HandLandmarker> | null = null;
 
+export type HandLandmarkCapture = {
+  tensor: Float32Array;
+  detectedFrameCount: number;
+  detectedFrameRatio: number;
+};
+
 async function getLandmarker() {
   if (!landmarkerPromise) {
     landmarkerPromise = FilesetResolver.forVisionTasks(WASM_URL).then((vision) =>
@@ -65,8 +71,17 @@ export async function captureHandLandmarkTensor(
   count = NUM_FRAMES,
   durationMs = 2000
 ): Promise<Float32Array> {
+  return (await captureHandLandmarkSample(video, count, durationMs)).tensor;
+}
+
+export async function captureHandLandmarkSample(
+  video: HTMLVideoElement,
+  count = NUM_FRAMES,
+  durationMs = 2000
+): Promise<HandLandmarkCapture> {
   const landmarker = await getLandmarker();
   const frames: Float32Array[] = [];
+  let detectedFrameCount = 0;
   const step = durationMs / Math.max(count - 1, 1);
   const start = performance.now();
   for (let i = 0; i < count; i++) {
@@ -74,6 +89,7 @@ export async function captureHandLandmarkTensor(
     const wait = targetT - performance.now();
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
     const result = landmarker.detectForVideo(video, performance.now());
+    if ((result.landmarks ?? []).length > 0) detectedFrameCount += 1;
     frames.push(frameFeatures(result));
   }
 
@@ -85,5 +101,9 @@ export async function captureHandLandmarkTensor(
       out[idx++] = frames[t][f] ?? 0;
     }
   }
-  return out;
+  return {
+    tensor: out,
+    detectedFrameCount,
+    detectedFrameRatio: detectedFrameCount / Math.max(count, 1),
+  };
 }

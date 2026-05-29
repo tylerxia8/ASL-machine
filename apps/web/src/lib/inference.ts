@@ -104,9 +104,16 @@ export async function runInference(tensorData: Float32Array) {
       bestIdx = i;
     }
   }
+  const topPredictions = probs
+    .map((confidence, idx) => ({ label: labels!.sign_ids[idx], confidence }))
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 3);
+  const margin = topPredictions[0].confidence - (topPredictions[1]?.confidence ?? 0);
   return {
     predictedLabel: labels.sign_ids[bestIdx],
     confidence: best,
+    margin,
+    topPredictions,
     probs,
   };
 }
