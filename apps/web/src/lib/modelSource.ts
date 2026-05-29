@@ -17,6 +17,7 @@ export type ModelSource = {
   modelUrl: string;
   labelsUrl: string;
   metaUrl: string;
+  calibrationUrl?: string;
 };
 
 export const BUNDLED_SOURCE: ModelSource = {
@@ -25,6 +26,7 @@ export const BUNDLED_SOURCE: ModelSource = {
   modelUrl: "/models/model.onnx",
   labelsUrl: "/models/labels.json",
   metaUrl: "/models/model_meta.json",
+  calibrationUrl: "/models/recognition_calibration.json",
 };
 
 // release-assets.githubusercontent.com doesn't send CORS headers, so the
@@ -41,6 +43,9 @@ function releaseToSource(tag: string, assets: { name: string }[]): ModelSource |
     modelUrl: proxy("model.onnx"),
     labelsUrl: proxy("labels.json"),
     metaUrl: names.has("model_meta.json") ? proxy("model_meta.json") : "/models/model_meta.json",
+    calibrationUrl: names.has("recognition_calibration.json")
+      ? proxy("recognition_calibration.json")
+      : "/models/recognition_calibration.json",
   };
 }
 

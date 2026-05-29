@@ -3,9 +3,10 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
 import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
-import { captureHandLandmarkSample } from "../lib/handLandmarks";
+import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
-import { loadModel, runInference, getLabels, ModelUnavailableError } from "../lib/inference";
+import { loadModel, runInference, getLabels, ModelUnavailableError, summarizeProbabilities } from "../lib/inference";
+import { confusionHint, loadRecognitionCalibration, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import { evaluateAttempt, EvalOutcome } from "../lib/threshold";
 
 type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
@@ -14,6 +15,7 @@ type SignReference = { handshape: string; movement: string; location: string };
 
 const RECORD_MS = 2000;
 const MIN_HAND_TRACKING_RATIO = 0.35;
+const MULTI_WINDOW_CAPTURE_MS = 2400;
 const PRACTICE_MODE_KEY = "practice_mode";
 
 function readPracticeMode(): PracticeMode {
@@ -28,6 +30,20 @@ function outcomeLabel(outcome: string) {
   if (outcome === "pass") return "pass";
   if (outcome === "retry") return "needs practice";
   return outcome;
+}
+
+function averageProbabilities(rows: number[][]) {
+  if (rows.length === 0) return [];
+  const out = new Array(rows[0].length).fill(0);
+  rows.forEach((row) => row.forEach((p, i) => (out[i] += p)));
+  return out.map((p) => p / rows.length);
+}
+
+function liveTrackingLabel(ratio: number | null) {
+  if (ratio === null) return "tracking...";
+  if (ratio >= 0.75) return "hands visible";
+  if (ratio >= MIN_HAND_TRACKING_RATIO) return "tracking okay";
+  return "move into frame";
 }
 
 const CAMERA_HELP: Record<string, string> = {
@@ -53,6 +69,9 @@ export default function PracticePage() {
   const [predicted, setPredicted] = useState("");
   const [topPredictions, setTopPredictions] = useState<{ label: string; confidence: number }[]>([]);
   const [trackingRatio, setTrackingRatio] = useState<number | null>(null);
+  const [liveTrackingRatio, setLiveTrackingRatio] = useState<number | null>(null);
+  const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
+  const [recognitionFeedbackSaved, setRecognitionFeedbackSaved] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [modelVersion, setModelVersion] = useState("");
   const [modelError, setModelError] = useState<string | null>(null);
@@ -81,6 +100,7 @@ export default function PracticePage() {
             : "Recognition model failed to load. Refresh to retry."
         );
       });
+    loadRecognitionCalibration().then(setCalibration).catch(() => setCalibration(null));
   }, [wave]);
 
   useEffect(() => {
@@ -118,6 +138,30 @@ export default function PracticePage() {
     startCamera();
     return () => stopCamera();
   }, [startCamera]);
+
+  useEffect(() => {
+    if (practiceMode !== "recognition" || cameraError || phase === "recording" || phase === "evaluating") {
+      setLiveTrackingRatio(null);
+      return;
+    }
+    let stopped = false;
+    let timer: number | undefined;
+    const tick = async () => {
+      if (!videoRef.current || stopped) return;
+      try {
+        const ratio = await getHandTrackingRatio(videoRef.current);
+        if (!stopped) setLiveTrackingRatio(ratio);
+      } catch {
+        if (!stopped) setLiveTrackingRatio(null);
+      }
+      if (!stopped) timer = window.setTimeout(tick, 700);
+    };
+    timer = window.setTimeout(tick, 250);
+    return () => {
+      stopped = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [cameraError, phase, practiceMode]);
 
   const saveOutcome = async (
     result: EvalOutcome,
@@ -161,6 +205,7 @@ export default function PracticePage() {
     setPredicted("");
     setTopPredictions([]);
     setTrackingRatio(null);
+    setRecognitionFeedbackSaved(false);
     setConfidence(0);
   };
 
@@ -172,6 +217,7 @@ export default function PracticePage() {
       setPredicted("");
       setTopPredictions([]);
       setTrackingRatio(null);
+      setRecognitionFeedbackSaved(false);
       setHint(null);
       setPhase("selfCheck");
     }, RECORD_MS);
@@ -222,12 +268,17 @@ export default function PracticePage() {
     const modelSz = meta?.frame_size ?? 32;
     try {
       let modelInput: Float32Array;
+      let averagedProbs: number[] | null = null;
       if (meta?.input_type === "hand_landmarks") {
-        const sample = await captureHandLandmarkSample(videoRef.current, captureFrameCount, RECORD_MS);
-        modelInput = sample.tensor;
-        setTrackingRatio(sample.detectedFrameRatio);
-        if (sample.detectedFrameRatio < MIN_HAND_TRACKING_RATIO) {
-          const ratioPct = Math.round(sample.detectedFrameRatio * 100);
+        const samples = await captureHandLandmarkWindows(videoRef.current, 3, captureFrameCount, MULTI_WINDOW_CAPTURE_MS);
+        const bestSample = samples.reduce((best, sample) =>
+          sample.detectedFrameRatio > best.detectedFrameRatio ? sample : best
+        );
+        modelInput = bestSample.tensor;
+        const averageTracking = samples.reduce((sum, sample) => sum + sample.detectedFrameRatio, 0) / samples.length;
+        setTrackingRatio(averageTracking);
+        if (averageTracking < MIN_HAND_TRACKING_RATIO) {
+          const ratioPct = Math.round(averageTracking * 100);
           setOutcome("fail");
           setConfidence(0);
           setPredicted("low_tracking");
@@ -243,6 +294,9 @@ export default function PracticePage() {
           setPhase("result");
           return;
         }
+        setPhase("evaluating");
+        const results = await Promise.all(samples.map((sample) => runInference(sample.tensor)));
+        averagedProbs = averageProbabilities(results.map((result) => result.probs));
       } else {
         const rawFrames = await captureFramesAsync(
           videoRef.current,
@@ -257,8 +311,16 @@ export default function PracticePage() {
             : framesToTensor(rawFrames, captureFrameCount, captureSz, captureSz);
       }
       setPhase("evaluating");
-      const { predictedLabel, confidence: conf, topPredictions: top } = await runInference(modelInput);
-      const result = evaluateAttempt(current.sign_id, predictedLabel, conf);
+      const modelResult = averagedProbs ? summarizeProbabilities(averagedProbs) : await runInference(modelInput);
+      const { predictedLabel, confidence: conf, topPredictions: top } = modelResult;
+      const signThresholds = thresholdsFor(calibration, current.sign_id);
+      const result = evaluateAttempt(
+        current.sign_id,
+        predictedLabel,
+        conf,
+        signThresholds.passThreshold,
+        signThresholds.retryThreshold
+      );
       setOutcome(result.outcome);
       setConfidence(result.confidence);
       setPredicted(predictedLabel);
@@ -267,8 +329,13 @@ export default function PracticePage() {
       const hintReason =
         result.outcome === "retry" ? "framing" : result.outcome === "fail" ? "fail" : "pass";
       if (result.outcome !== "pass") {
-        const h = await fetchHint(current.sign_id, hintReason, userId);
-        setHint(h.message);
+        const targetedHint = confusionHint(calibration, current.sign_id, predictedLabel);
+        if (targetedHint) {
+          setHint(targetedHint);
+        } else {
+          const h = await fetchHint(current.sign_id, hintReason, userId);
+          setHint(h.message);
+        }
       } else {
         setHint(null);
       }
@@ -292,7 +359,8 @@ export default function PracticePage() {
   };
 
   const recordAndEvaluate = () => {
-    // The model-specific capture path inside evaluate() waits RECORD_MS.
+    setRecognitionFeedbackSaved(false);
+    // The model-specific capture path inside evaluate() waits for its capture window.
     // UI just needs to flip to "recording".
     setPhase("recording");
     void evaluate();
@@ -303,9 +371,33 @@ export default function PracticePage() {
     setHint(null);
     setTopPredictions([]);
     setTrackingRatio(null);
+    setRecognitionFeedbackSaved(false);
     setPhase("prompt");
     if (index + 1 < signs.length) setIndex(index + 1);
     else setIndex(0);
+  };
+
+  const saveRecognitionFeedback = (correct: boolean) => {
+    if (!current || !predicted || predicted === "low_tracking") return;
+    const entry = {
+      sign_id: current.sign_id,
+      predicted_label: predicted,
+      confidence,
+      correct,
+      top_predictions: topPredictions,
+      tracking_ratio: trackingRatio,
+      model_version: modelVersion,
+      ts: Date.now(),
+    };
+    try {
+      const key = "recognition_feedback";
+      const existing = JSON.parse(localStorage.getItem(key) || "[]") as unknown[];
+      localStorage.setItem(key, JSON.stringify([...existing.slice(-199), entry]));
+    } catch {
+      // Feedback still gets sent as an analytics event below.
+    }
+    trackEvent("recognition_feedback", entry);
+    setRecognitionFeedbackSaved(true);
   };
 
   if (!current && signs.length === 0) {
@@ -376,6 +468,30 @@ export default function PracticePage() {
         <div className="video-wrap" style={{ position: "relative" }}>
           <video ref={videoRef} muted playsInline />
           <div className="guide-box" title="Keep hands and face inside box" />
+          {practiceMode === "recognition" && phase !== "recording" && phase !== "evaluating" && (
+            <div
+              style={{
+                position: "absolute",
+                right: 8,
+                top: 8,
+                background:
+                  liveTrackingRatio === null
+                    ? "rgba(15, 20, 25, 0.82)"
+                    : liveTrackingRatio >= 0.75
+                      ? "rgba(34, 197, 94, 0.88)"
+                      : liveTrackingRatio >= MIN_HAND_TRACKING_RATIO
+                        ? "rgba(245, 158, 11, 0.9)"
+                        : "rgba(239, 68, 68, 0.9)",
+                color: "white",
+                padding: "0.25rem 0.6rem",
+                borderRadius: "6px",
+                fontWeight: 700,
+                fontSize: "0.82rem",
+              }}
+            >
+              {liveTrackingLabel(liveTrackingRatio)}
+            </div>
+          )}
           {phase === "recording" && (
             <>
               <div
@@ -424,7 +540,7 @@ export default function PracticePage() {
                 This sign isn't in the trained model yet. Use the reference below to learn it, then skip to the next sign.
               </p>
             ) : (
-              <p>When you click Record, perform the sign inside the box. Recording lasts {RECORD_MS / 1000} seconds.</p>
+              <p>When you click Record, perform the sign inside the box. Recording lasts about {MULTI_WINDOW_CAPTURE_MS / 1000} seconds.</p>
             )}
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
               {practiceMode === "guided" && (
@@ -521,6 +637,18 @@ export default function PracticePage() {
               <div className="hint-panel">
                 <strong>Hint</strong>
                 <p>{hint}</p>
+              </div>
+            )}
+            {practiceMode === "recognition" && predicted && predicted !== "low_tracking" && (
+              <div style={{ display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", marginTop: "1rem" }}>
+                <span style={{ color: "var(--muted)", fontSize: "0.9rem" }}>Was recognition right?</span>
+                <button className="btn btn-secondary" type="button" onClick={() => saveRecognitionFeedback(true)}>
+                  Yes
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => saveRecognitionFeedback(false)}>
+                  No
+                </button>
+                {recognitionFeedbackSaved && <span className="status-pass">Saved</span>}
               </div>
             )}
             <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>

@@ -95,7 +95,13 @@ export async function runInference(tensorData: Float32Array) {
   const outKey = session.outputNames[0];
   const logits = results[outKey].data as Float32Array;
   const probs = softmax(Array.from(logits));
+  return summarizeProbabilities(probs);
+}
 
+export function summarizeProbabilities(probs: number[]) {
+  if (!labels) {
+    throw new ModelUnavailableError("Labels not initialized.");
+  }
   let bestIdx = 0;
   let best = probs[0];
   for (let i = 1; i < probs.length; i++) {
