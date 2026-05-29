@@ -2,12 +2,13 @@
 
 ## Sources
 
-The Wave 1 signer data comes from Sem-Lex. Local learner samples are retained for smoke testing and learner-quality calibration, but they should not be counted as the signer-diversity source for validation claims.
+The primary Wave 1 signer data comes from Sem-Lex. ASL Citizen can be used as an optional targeted supplement for weak signs. Local learner samples are retained for smoke testing and learner-quality calibration, but they should not be counted as the signer-diversity source for validation claims.
 
 | Source | Description | Stored in |
 |---|---|---|
 | **Self-recorded learner samples** | Captured via the in-app `/capture` flow. Currently 25 single-clip-per-sign baseline recordings from one signer. Used only as a smoke/calibration set, not as the source of signer diversity. | `ml/data/learner_samples/` (committed to repo, ~12 MB) |
 | **Sem-Lex Benchmark** | [leekezar/SemLex](https://github.com/leekezar/SemLex), Apache-2.0. 91,148 isolated-sign videos across 3,149 glosses from 41 deaf signers. We curate a subset matching our 25-sign Wave 1 roster. **Only the raw videos are used — Sem-Lex's pretrained SL-GCN models are not touched.** See [NO_PRETRAINED_MODELS.md](NO_PRETRAINED_MODELS.md). | Fetched on demand by [`ml/scripts/fetch_semlex.py`](../ml/scripts/fetch_semlex.py); never committed. In CI, downloads are cached via `actions/cache@v4` between runs. |
+| **ASL Citizen** | Optional supplement from Microsoft Research's ASL Citizen dataset. The fetcher range-reads the official ZIP and downloads only matching clips, so the 45 GB archive is not stored locally. | Fetched on demand by [`ml/scripts/fetch_asl_citizen.py`](../ml/scripts/fetch_asl_citizen.py) when `include_asl_citizen=true`; never committed. |
 
 Access to Sem-Lex requires accepting [their terms of use](https://docs.google.com/forms/d/e/1FAIpQLSeFjIcbJcr2kWibgrEdFyLhNADo1ErnVGuQHtGeiDiqe4iteQ/viewform). The fetcher reads the index URL Sem-Lex provides via the `SEMLEX_INDEX_URL` env var or `--index-url` flag.
 

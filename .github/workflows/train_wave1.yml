@@ -54,6 +54,22 @@ on:
         description: "Cap per sign when pulling from Sem-Lex (ignored otherwise)"
         type: number
         default: 50
+      include_asl_citizen:
+        description: "Add targeted ASL Citizen clips via remote ZIP range extraction"
+        type: boolean
+        default: false
+      asl_citizen_signs:
+        description: "Comma-separated signs to pull from ASL Citizen; blank means Wave 1"
+        type: string
+        default: "four,who,goodbye,how,deaf,hello,please,thank_you,sorry,no,yes,three"
+      asl_citizen_clips_per_sign:
+        description: "Cap per sign when pulling ASL Citizen"
+        type: number
+        default: 30
+      asl_citizen_splits:
+        description: "Which ASL Citizen splits to pull"
+        type: string
+        default: "train,val,test"
       epochs:
         description: "Training epochs"
         type: number
@@ -222,6 +238,17 @@ jobs:
           SEMLEX_DRIVE_FILES: ${{ steps.subset_drive.outputs.mode == 'drive' && steps.subset_drive.outputs.subset || '' }}
           SEMLEX_CLIPS_PER_SIGN: ${{ inputs.semlex_clips_per_sign }}
         run: python ml/scripts/fetch_semlex.py
+
+      - name: Fetch ASL Citizen supplement
+        if: inputs.include_asl_citizen
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/scripts/fetch_asl_citizen.py \
+            --signs "${{ inputs.asl_citizen_signs }}" \
+            --splits "${{ inputs.asl_citizen_splits }}" \
+            --clips-per-sign ${{ inputs.asl_citizen_clips_per_sign }} \
+            --out-dir ml/data/incoming
 
       - name: Show staged video summary
         run: |
