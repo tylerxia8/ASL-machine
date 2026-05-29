@@ -53,7 +53,7 @@
     "who": 23,
     "yes": 24
   },
-  "model_version": "wave1-semlex-full-v18-hand-landmarks",
+  "model_version": "wave1-semlex-aslcitizen-v22-hand-landmarks",
   "model_size": "hand_landmark_tcn",
   "input_type": "hand_landmarks",
   "num_frames": 24,

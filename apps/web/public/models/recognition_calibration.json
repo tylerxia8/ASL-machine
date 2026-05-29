@@ -1,18 +1,18 @@
 {
-  "model_version": "wave1-semlex-full-v18-hand-landmarks",
-  "accuracy": 0.7830882352941176,
+  "model_version": "wave1-semlex-aslcitizen-v22-hand-landmarks",
+  "accuracy": 0.7991543340380549,
   "thresholds": {
     "deaf": {
       "passThreshold": 0.93,
       "retryThreshold": 0.78,
-      "f1": 0.5526315789473685,
-      "support": 31
+      "f1": 0.6865671641791045,
+      "support": 61
     },
     "eat": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.8918918918918919,
-      "support": 38
+      "f1": 0.8895434462444771,
+      "support": 332
     },
     "five": {
       "passThreshold": 0.95,
@@ -29,240 +29,276 @@
     "friend": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.8846153846153846,
-      "support": 23
+      "f1": 0.8633093525179856,
+      "support": 68
     },
     "goodbye": {
       "passThreshold": 0.95,
       "retryThreshold": 0.82,
-      "f1": 0.42857142857142855,
-      "support": 8
+      "f1": 0.47368421052631576,
+      "support": 11
     },
     "hello": {
-      "passThreshold": 0.93,
-      "retryThreshold": 0.78,
-      "f1": 0.5833333333333334,
-      "support": 14
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.7894736842105263,
+      "support": 20
     },
     "help": {
-      "passThreshold": 0.86,
-      "retryThreshold": 0.62,
-      "f1": 0.8842105263157894,
-      "support": 48
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.7333333333333333,
+      "support": 88
     },
     "how": {
       "passThreshold": 0.95,
       "retryThreshold": 0.82,
-      "f1": 0.46153846153846156,
-      "support": 7
+      "f1": 0.35294117647058826,
+      "support": 13
     },
     "meet": {
-      "passThreshold": 0.86,
-      "retryThreshold": 0.62,
-      "f1": 0.918918918918919,
-      "support": 20
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.7058823529411765,
+      "support": 31
     },
     "name": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.9666666666666667,
-      "support": 30
+      "f1": 0.8505747126436781,
+      "support": 48
     },
     "nice": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.8571428571428571,
-      "support": 33
+      "f1": 0.8527131782945736,
+      "support": 60
     },
     "no": {
-      "passThreshold": 0.93,
-      "retryThreshold": 0.78,
-      "f1": 0.6666666666666666,
-      "support": 22
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.7536231884057971,
+      "support": 38
     },
     "one": {
-      "passThreshold": 0.86,
-      "retryThreshold": 0.62,
-      "f1": 0.9142857142857143,
-      "support": 18
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.8,
+      "support": 35
     },
     "please": {
       "passThreshold": 0.9,
       "retryThreshold": 0.7,
-      "f1": 0.75,
-      "support": 8
+      "f1": 0.7142857142857143,
+      "support": 13
     },
     "sleep": {
-      "passThreshold": 0.86,
-      "retryThreshold": 0.62,
-      "f1": 0.8846153846153846,
-      "support": 25
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.7034482758620689,
+      "support": 93
     },
     "sorry": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.9714285714285714,
-      "support": 18
+      "f1": 0.9538461538461539,
+      "support": 32
     },
     "thank_you": {
-      "passThreshold": 0.93,
-      "retryThreshold": 0.78,
-      "f1": 0.64,
-      "support": 9
+      "passThreshold": 0.9,
+      "retryThreshold": 0.7,
+      "f1": 0.723404255319149,
+      "support": 20
     },
     "three": {
       "passThreshold": 0.93,
       "retryThreshold": 0.78,
-      "f1": 0.6153846153846154,
-      "support": 5
+      "f1": 0.5625,
+      "support": 10
     },
     "two": {
-      "passThreshold": 0.9,
-      "retryThreshold": 0.7,
-      "f1": 0.7741935483870968,
-      "support": 19
+      "passThreshold": 0.95,
+      "retryThreshold": 0.82,
+      "f1": 0.4117647058823529,
+      "support": 27
     },
     "water": {
       "passThreshold": 0.86,
       "retryThreshold": 0.62,
-      "f1": 0.9736842105263158,
-      "support": 37
+      "f1": 0.9754901960784313,
+      "support": 204
     },
     "what": {
       "passThreshold": 0.9,
       "retryThreshold": 0.7,
-      "f1": 0.8163265306122449,
-      "support": 29
+      "f1": 0.7407407407407407,
+      "support": 46
     },
     "where": {
       "passThreshold": 0.9,
       "retryThreshold": 0.7,
-      "f1": 0.7454545454545455,
-      "support": 49
+      "f1": 0.7975460122699386,
+      "support": 81
     },
     "who": {
-      "passThreshold": 0.95,
-      "retryThreshold": 0.82,
-      "f1": 0.36363636363636365,
-      "support": 32
+      "passThreshold": 0.93,
+      "retryThreshold": 0.78,
+      "f1": 0.5934065934065934,
+      "support": 51
     },
     "yes": {
       "passThreshold": 0.93,
       "retryThreshold": 0.78,
-      "f1": 0.6857142857142857,
-      "support": 18
+      "f1": 0.6511627906976745,
+      "support": 34
     }
   },
   "confusions": {
     "deaf->where": {
-      "count": 4,
+      "count": 6,
       "message": "DEAF needs two face touch points. WHERE is a small side-to-side index-finger shake away from the face."
     },
-    "deaf->goodbye": {
+    "deaf->who": {
       "count": 3,
-      "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "DEAF should travel between ear and mouth. WHO stays close to the chin."
     },
-    "deaf->friend": {
-      "count": 2,
-      "message": "The model confused this with friend. Emphasize the handshape, location, and movement difference before trying again."
+    "deaf->yes": {
+      "count": 1,
+      "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "eat->sleep": {
-      "count": 2,
-      "message": "The model confused this with sleep. Emphasize the handshape, location, and movement difference before trying again."
+    "eat->four": {
+      "count": 8,
+      "message": "The model confused this with four. Emphasize the handshape, location, and movement difference before trying again."
     },
     "eat->thank_you": {
-      "count": 1,
+      "count": 6,
       "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "eat->no": {
-      "count": 1,
-      "message": "The model confused this with no. Emphasize the handshape, location, and movement difference before trying again."
+    "eat->how": {
+      "count": 5,
+      "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
     },
     "five->thank_you": {
       "count": 1,
       "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
     },
+    "four->nice": {
+      "count": 1,
+      "message": "The model confused this with nice. Emphasize the handshape, location, and movement difference before trying again."
+    },
     "four->goodbye": {
-      "count": 2,
+      "count": 1,
       "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "goodbye->how": {
-      "count": 1,
+    "friend->how": {
+      "count": 5,
       "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "goodbye->hello": {
+    "friend->meet": {
+      "count": 1,
+      "message": "The model confused this with meet. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "friend->hello": {
       "count": 1,
       "message": "The model confused this with hello. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "hello->sleep": {
+    "goodbye->nice": {
+      "count": 1,
+      "message": "The model confused this with nice. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "goodbye->deaf": {
+      "count": 1,
+      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "hello->four": {
       "count": 2,
-      "message": "The model confused this with sleep. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with four. Emphasize the handshape, location, and movement difference before trying again."
     },
     "hello->deaf": {
       "count": 2,
       "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "hello->water": {
+    "hello->nice": {
       "count": 1,
-      "message": "The model confused this with water. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with nice. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "help->how": {
+      "count": 11,
+      "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
     },
     "help->who": {
-      "count": 2,
+      "count": 8,
       "message": "The model confused this with who. Emphasize the handshape, location, and movement difference before trying again."
     },
     "help->nice": {
-      "count": 2,
+      "count": 7,
       "message": "The model confused this with nice. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "help->please": {
-      "count": 1,
-      "message": "The model confused this with please. Emphasize the handshape, location, and movement difference before trying again."
-    },
     "how->help": {
-      "count": 3,
+      "count": 2,
       "message": "HOW starts with curved hands together and rotates. HELP stacks an A-hand on a flat palm and lifts."
     },
-    "how->where": {
+    "how->what": {
       "count": 1,
-      "message": "The model confused this with where. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with what. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "meet->where": {
+    "how->sorry": {
       "count": 1,
-      "message": "The model confused this with where. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with sorry. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "meet->thank_you": {
-      "count": 1,
-      "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
+    "meet->deaf": {
+      "count": 3,
+      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "meet->how": {
-      "count": 1,
-      "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "name->who": {
-      "count": 1,
+    "meet->who": {
+      "count": 2,
       "message": "The model confused this with who. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "nice->goodbye": {
-      "count": 3,
-      "message": "NICE uses both hands with a palm slide. GOODBYE is a one-hand finger wave."
+    "meet->one": {
+      "count": 2,
+      "message": "The model confused this with one. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "nice->thank_you": {
+    "name->friend": {
+      "count": 4,
+      "message": "The model confused this with friend. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "name->how": {
+      "count": 3,
+      "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "name->yes": {
       "count": 1,
-      "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "nice->hello": {
+      "count": 2,
+      "message": "The model confused this with hello. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "nice->what": {
+      "count": 1,
+      "message": "The model confused this with what. Emphasize the handshape, location, and movement difference before trying again."
     },
     "nice->no": {
       "count": 1,
       "message": "The model confused this with no. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "no->yes": {
-      "count": 3,
-      "message": "NO is a quick finger-close. YES is a fist nodding at the wrist."
-    },
     "no->goodbye": {
-      "count": 2,
+      "count": 5,
       "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "no->deaf": {
+    "no->yes": {
+      "count": 4,
+      "message": "NO is a quick finger-close. YES is a fist nodding at the wrist."
+    },
+    "no->three": {
+      "count": 1,
+      "message": "The model confused this with three. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "one->eat": {
+      "count": 4,
+      "message": "The model confused this with eat. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "one->deaf": {
       "count": 2,
       "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
     },
@@ -270,93 +306,121 @@
       "count": 1,
       "message": "The model confused this with where. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "one->deaf": {
+    "please->yes": {
       "count": 1,
-      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
+      "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "please->deaf": {
-      "count": 2,
-      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "sleep->thank_you": {
-      "count": 1,
-      "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "sleep->eat": {
+    "please->eat": {
       "count": 1,
       "message": "The model confused this with eat. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "please->deaf": {
+      "count": 1,
+      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "sleep->eat": {
+      "count": 30,
+      "message": "The model confused this with eat. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "sleep->four": {
+      "count": 6,
+      "message": "The model confused this with four. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "sleep->goodbye": {
+      "count": 2,
+      "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
     },
     "sorry->goodbye": {
       "count": 1,
       "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
     },
+    "thank_you->what": {
+      "count": 1,
+      "message": "The model confused this with what. Emphasize the handshape, location, and movement difference before trying again."
+    },
     "thank_you->help": {
       "count": 1,
       "message": "The model confused this with help. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "three->thank_you": {
+    "thank_you->eat": {
       "count": 1,
-      "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "two->three": {
-      "count": 3,
-      "message": "TWO uses index and middle fingers. THREE uses thumb, index, and middle."
-    },
-    "two->eat": {
-      "count": 2,
       "message": "The model confused this with eat. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "two->no": {
+    "three->friend": {
       "count": 1,
+      "message": "The model confused this with friend. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "two->three": {
+      "count": 12,
+      "message": "TWO uses index and middle fingers. THREE uses thumb, index, and middle."
+    },
+    "two->four": {
+      "count": 3,
+      "message": "The model confused this with four. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "two->no": {
+      "count": 2,
       "message": "The model confused this with no. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "water->name": {
+      "count": 1,
+      "message": "The model confused this with name. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "water->friend": {
+      "count": 1,
+      "message": "The model confused this with friend. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "water->four": {
+      "count": 1,
+      "message": "The model confused this with four. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "what->deaf": {
+      "count": 3,
+      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
     },
     "what->thank_you": {
       "count": 2,
       "message": "The model confused this with thank_you. Emphasize the handshape, location, and movement difference before trying again."
     },
-    "what->yes": {
-      "count": 1,
-      "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "what->three": {
-      "count": 1,
-      "message": "The model confused this with three. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "where->goodbye": {
-      "count": 3,
-      "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "where->deaf": {
-      "count": 3,
-      "message": "WHERE should not touch the face. Keep the finger upright and shake it in neutral space."
+    "what->nice": {
+      "count": 2,
+      "message": "The model confused this with nice. Emphasize the handshape, location, and movement difference before trying again."
     },
     "where->yes": {
-      "count": 1,
+      "count": 4,
+      "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "where->deaf": {
+      "count": 4,
+      "message": "WHERE should not touch the face. Keep the finger upright and shake it in neutral space."
+    },
+    "where->one": {
+      "count": 2,
+      "message": "The model confused this with one. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "who->yes": {
+      "count": 9,
       "message": "The model confused this with yes. Emphasize the handshape, location, and movement difference before trying again."
     },
     "who->where": {
-      "count": 11,
+      "count": 6,
       "message": "WHO happens close to the chin. WHERE is an upright index finger shaking in neutral space."
     },
     "who->deaf": {
-      "count": 11,
+      "count": 6,
       "message": "WHO stays near the chin in a small circle or tap. DEAF has two clear touch points near ear and mouth."
     },
-    "who->water": {
-      "count": 1,
-      "message": "The model confused this with water. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "yes->friend": {
-      "count": 3,
-      "message": "The model confused this with friend. Emphasize the handshape, location, and movement difference before trying again."
-    },
-    "yes->deaf": {
-      "count": 2,
-      "message": "The model confused this with deaf. Emphasize the handshape, location, and movement difference before trying again."
-    },
     "yes->where": {
-      "count": 1,
+      "count": 2,
       "message": "The model confused this with where. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "yes->goodbye": {
+      "count": 2,
+      "message": "The model confused this with goodbye. Emphasize the handshape, location, and movement difference before trying again."
+    },
+    "yes->how": {
+      "count": 1,
+      "message": "The model confused this with how. Emphasize the handshape, location, and movement difference before trying again."
     }
   }
 }
