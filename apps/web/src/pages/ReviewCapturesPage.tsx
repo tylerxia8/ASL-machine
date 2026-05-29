@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { fetchSigns, type SignMeta } from "../lib/api";
 import { downloadText } from "../lib/recognitionFeedback";
 
 type ClipReview = {
@@ -22,6 +23,7 @@ function inferClip(file: File) {
 
 export default function ReviewCapturesPage() {
   const [clips, setClips] = useState<ClipReview[]>([]);
+  const [signs, setSigns] = useState<SignMeta[]>([]);
   const accepted = clips.filter((clip) => clip.accepted);
   const grouped = useMemo(() => {
     const rows: Record<string, number> = {};
@@ -34,6 +36,10 @@ export default function ReviewCapturesPage() {
   useEffect(() => {
     return () => clips.forEach((clip) => URL.revokeObjectURL(clip.url));
   }, [clips]);
+
+  useEffect(() => {
+    fetchSigns(1).then(setSigns).catch(() => setSigns([]));
+  }, []);
 
   const addFiles = (files: FileList | null) => {
     if (!files) return;
@@ -54,6 +60,10 @@ export default function ReviewCapturesPage() {
 
   const toggle = (id: string) => {
     setClips((current) => current.map((clip) => clip.id === id ? { ...clip, accepted: !clip.accepted } : clip));
+  };
+
+  const updateClip = (id: string, patch: Partial<Pick<ClipReview, "sign_id" | "signer_id">>) => {
+    setClips((current) => current.map((clip) => clip.id === id ? { ...clip, ...patch } : clip));
   };
 
   const exportManifest = () => {
@@ -118,6 +128,29 @@ export default function ReviewCapturesPage() {
                   <code>{clip.sign_id}</code> · {clip.signer_id}
                 </p>
                 <p style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{clip.file.name}</p>
+                <label>
+                  <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Sign</span>
+                  <select
+                    className="input"
+                    value={clip.sign_id}
+                    onChange={(event) => updateClip(clip.id, { sign_id: event.target.value })}
+                  >
+                    {clip.sign_id === "unknown" && <option value="unknown">unknown</option>}
+                    {signs.map((sign) => (
+                      <option key={sign.sign_id} value={sign.sign_id}>
+                        {sign.gloss}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Signer</span>
+                  <input
+                    className="input"
+                    value={clip.signer_id}
+                    onChange={(event) => updateClip(clip.id, { signer_id: event.target.value })}
+                  />
+                </label>
                 <button className={clip.accepted ? "btn" : "btn btn-secondary"} onClick={() => toggle(clip.id)}>
                   {clip.accepted ? "Accepted" : "Rejected"}
                 </button>

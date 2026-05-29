@@ -16,6 +16,17 @@ const PHRASES: Phrase[] = [
   { id: "nice_meet", label: "Nice to meet you", signs: ["nice", "meet"] },
   { id: "who_deaf", label: "Who is deaf?", signs: ["who", "deaf"] },
 ];
+const PHRASE_LOG_KEY = "phrase_practice_log";
+
+function readPhraseLog() {
+  try {
+    const raw = localStorage.getItem(PHRASE_LOG_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed as { phrase: string; outcome: string; ts?: number }[] : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function PhrasePage() {
   const auth = useAuth();
@@ -23,7 +34,7 @@ export default function PhrasePage() {
   const [index, setIndex] = useState(0);
   const [step, setStep] = useState(0);
   const [references, setReferences] = useState<Record<string, HintResponse>>({});
-  const [log, setLog] = useState<{ phrase: string; outcome: string }[]>([]);
+  const [log, setLog] = useState(readPhraseLog);
 
   const phrase = PHRASES[index];
   const currentSign = phrase.signs[step];
@@ -54,8 +65,13 @@ export default function PhrasePage() {
   }, [phrase.id, phrase.signs, userId]);
 
   const mark = (outcome: "pass" | "retry") => {
-    const nextLog = [...log, { phrase: phrase.id, outcome }];
+    const nextLog = [...log.slice(-99), { phrase: phrase.id, outcome, ts: Date.now() }];
     setLog(nextLog);
+    try {
+      localStorage.setItem(PHRASE_LOG_KEY, JSON.stringify(nextLog));
+    } catch {
+      // Phrase practice still works if storage is blocked.
+    }
     trackEvent("phrase_attempt", { phrase_id: phrase.id, outcome });
     setIndex((i) => (i + 1) % PHRASES.length);
     setStep(0);

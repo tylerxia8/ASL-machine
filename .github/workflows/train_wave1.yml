@@ -128,6 +128,14 @@ on:
         description: "Model version tag (also used for release tag)"
         type: string
         default: wave1-ci-v1
+      baseline_model_tag:
+        description: "Optional release tag to compare against before promotion"
+        type: string
+        default: ""
+      fail_on_regression:
+        description: "Fail workflow when model comparison recommends DO NOT PROMOTE"
+        type: boolean
+        default: false
       run_overfit_probe:
         description: "Before full training, verify the model can memorize a tiny subset"
         type: boolean
@@ -404,6 +412,36 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: python ml/scripts/build_capture_plan.py --out ml/exports/capture_plan.md
 
+      - name: Compare against baseline model
+        if: ${{ !inputs.probe_only && inputs.baseline_model_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONIOENCODING: utf-8
+        run: |
+          mkdir -p ml/exports/baseline
+          gh release download "${{ inputs.baseline_model_tag }}" \
+            --pattern eval_metrics.json \
+            --dir ml/exports/baseline \
+            --clobber
+          extra_args=""
+          if [ "${{ inputs.fail_on_regression }}" = "true" ]; then
+            extra_args="--fail-on-no-promote"
+          fi
+          python ml/scripts/compare_models.py \
+            --base ml/exports/baseline/eval_metrics.json \
+            --candidate ml/exports/eval_metrics.json \
+            --out ml/exports/model_comparison.md \
+            $extra_args
+
+      - name: Ensure comparison placeholder
+        if: ${{ !inputs.probe_only && inputs.baseline_model_tag == '' }}
+        run: |
+          cat > ml/exports/model_comparison.md <<'EOF'
+          # Model Comparison
+
+          No baseline_model_tag was provided for this run.
+          EOF
+
       - name: Export ONNX
         if: ${{ !inputs.probe_only && inputs.model_size != 'hand_landmark_tcn' }}
         env:
@@ -434,6 +472,7 @@ jobs:
             ml/exports/eval_metrics.json
             ml/exports/recognition_calibration.json
             ml/exports/capture_plan.md
+            ml/exports/model_comparison.md
             ml/exports/manifest_report.json
             ml/reports/contact_sheets/*.jpg
             docs/VALIDATION_REPORT.md
@@ -464,6 +503,7 @@ jobs:
             - `eval_metrics.json` — raw classification report + accuracy
             - `recognition_calibration.json` — per-sign thresholds + targeted confusion hints
             - `capture_plan.md` — ranked next-recording plan based on weak signs and learner clips
+            - `model_comparison.md` — candidate-vs-baseline metrics and promotion recommendation
             - `manifest_report.json` — split/sign/signer coverage diagnostics
             - `contact_sheet_*.jpg` — visual QA sheets for preprocessing/crop review
             - `VALIDATION_REPORT.md` — full report with auto-metrics block
@@ -476,6 +516,7 @@ jobs:
             ml/exports/eval_metrics.json
             ml/exports/recognition_calibration.json
             ml/exports/capture_plan.md
+            ml/exports/model_comparison.md
             ml/exports/manifest_report.json
             ml/reports/contact_sheets/*.jpg
             docs/VALIDATION_REPORT.md

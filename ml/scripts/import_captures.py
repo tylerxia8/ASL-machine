@@ -107,6 +107,27 @@ def infer_meta(path: Path, data: dict | None) -> tuple[str, str]:
 VIDEO_EXTS = (".webm", ".mp4", ".mov", ".mkv", ".avi")
 
 
+def _reviewed_video_meta() -> dict[str, tuple[str | None, str | None]] | None:
+    """Return accepted filename metadata from review/capture manifests, if present."""
+    manifests = [
+        path for path in INCOMING.glob("*.json")
+        if "manifest" in path.name.lower() or "capture_session" in path.name.lower()
+    ]
+    if not manifests:
+        return None
+    accepted: dict[str, tuple[str | None, str | None]] = {}
+    for manifest in manifests:
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        for clip in data.get("clips", []):
+            filename = clip.get("filename") if isinstance(clip, dict) else None
+            if filename:
+                accepted[filename] = (clip.get("sign_id"), clip.get("signer_id"))
+    return accepted or None
+
+
 def main():
     import sys
     import argparse
@@ -121,7 +142,15 @@ def main():
     files: list[Path] = []
     for ext in VIDEO_EXTS:
         files.extend(INCOMING.glob(f"*{ext}"))
-    files.extend(INCOMING.glob("*.json"))  # legacy capture-page format
+    reviewed_meta = _reviewed_video_meta()
+    if reviewed_meta is not None:
+        before = len(files)
+        files = [path for path in files if path.name in reviewed_meta]
+        print(f"Review manifest filter: {len(files)}/{before} video files accepted.")
+    files.extend(
+        path for path in INCOMING.glob("*.json")
+        if "manifest" not in path.name.lower() and "capture_session" not in path.name.lower()
+    )  # legacy capture-page format
     files = sorted(files)
     if not files:
         print(f"No video files in {INCOMING}. Expected one of {VIDEO_EXTS} or *.json.",
@@ -143,7 +172,11 @@ def main():
             else:
                 # cv2.VideoCapture handles webm/mp4/mov/mkv/avi via FFmpeg.
                 frames = load_webm(path, args.resize_mode)
-                sign_id, signer_id = infer_meta(path, None)
+                override = reviewed_meta.get(path.name) if reviewed_meta else None
+                if override and override[0] and override[1]:
+                    sign_id, signer_id = override
+                else:
+                    sign_id, signer_id = infer_meta(path, None)
             out_dir = CLIPS / sign_id / signer_id
             out_dir.mkdir(parents=True, exist_ok=True)
             existing = len(list(out_dir.glob("*.npz")))
