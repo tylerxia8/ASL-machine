@@ -56,7 +56,7 @@ jobs:
       - name: Install ML deps
         run: |
           pip install --index-url https://download.pytorch.org/whl/cpu torch
-          pip install -r ml/requirements.txt onnxscript
+          pip install -r ml/requirements.txt onnxscript pytest
       # Architecture + export + ONNX-runtime equivalence (no real training data needed)
       - name: Smoke-test pipeline (build → forward → ONNX export → ORT load → numerical match)
         run: python ml/scripts/smoke_pipeline.py
@@ -66,3 +66,5 @@ jobs:
       # Visual QA contact sheet generation
       - name: Smoke-test contact sheets
         run: python ml/scripts/test_contact_sheets.py
+      - name: Smoke-test import manifests
+        run: python -m pytest ml/scripts/test_import_captures_manifest.py -q

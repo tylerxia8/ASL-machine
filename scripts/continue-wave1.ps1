@@ -1,3 +1,8 @@
+param(
+  [string]$BaselineTag = "wave1-semlex-aslcitizen-v23-augmented-landmarks",
+  [switch]$SkipCompare
+)
+
 # Wave 1 continue: import any incoming captures, then train the hand-landmark model.
 # Aborts loudly if there is no real capture data (synthetic seeding has been removed).
 $ErrorActionPreference = "Stop"
@@ -48,6 +53,17 @@ Write-Host "==> Eval"
 Write-Host "==> Build recognition calibration and capture plan"
 & $Py ml/scripts/build_recognition_calibration.py
 & $Py ml/scripts/build_capture_plan.py --out docs/CAPTURE_PLAN.md
+
+if (-not $SkipCompare -and $BaselineTag) {
+  Write-Host "==> Compare against $BaselineTag"
+  $BaselineDir = Join-Path $Root "ml\exports\baseline"
+  New-Item -ItemType Directory -Force -Path $BaselineDir | Out-Null
+  gh release download $BaselineTag --pattern eval_metrics.json --dir $BaselineDir --clobber
+  & $Py ml/scripts/compare_models.py `
+    --base (Join-Path $BaselineDir "eval_metrics.json") `
+    --candidate ml/exports/eval_metrics.json `
+    --out ml/exports/model_comparison.md
+}
 
 Write-Host "==> Export ONNX"
 & $Py ml/export_landmark_onnx.py --checkpoint ml/checkpoints/wave1-local-hand-landmarks/best.pt

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchHint, trackEvent, type HintResponse } from "../lib/api";
+import { readPhraseLog, writePhraseLog } from "../lib/phraseLog";
 import ReferenceVideo from "../components/ReferenceVideo";
 
 type Phrase = {
@@ -17,18 +18,6 @@ const PHRASES: Phrase[] = [
   { id: "nice_meet", label: "Nice to meet you", signs: ["nice", "meet"] },
   { id: "who_deaf", label: "Who is deaf?", signs: ["who", "deaf"] },
 ];
-const PHRASE_LOG_KEY = "phrase_practice_log";
-
-function readPhraseLog() {
-  try {
-    const raw = localStorage.getItem(PHRASE_LOG_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed as { phrase: string; outcome: string; ts?: number }[] : [];
-  } catch {
-    return [];
-  }
-}
-
 export default function PhrasePage() {
   const auth = useAuth();
   const userId = getUserId(auth);
@@ -69,7 +58,7 @@ export default function PhrasePage() {
     const nextLog = [...log.slice(-99), { phrase: phrase.id, outcome, ts: Date.now() }];
     setLog(nextLog);
     try {
-      localStorage.setItem(PHRASE_LOG_KEY, JSON.stringify(nextLog));
+      writePhraseLog(nextLog);
     } catch {
       // Phrase practice still works if storage is blocked.
     }

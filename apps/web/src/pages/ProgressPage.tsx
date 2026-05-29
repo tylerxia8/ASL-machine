@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import { fetchMastery, fetchProgress, fetchSigns, Mastery, ProgressSummary, type SignMeta } from "../lib/api";
 import { buildLearningPriorities, type LearningPriority } from "../lib/learningPlan";
+import { readPhraseLog, summarizePhraseLog } from "../lib/phraseLog";
 import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import {
   clearRecognitionFeedback,
@@ -29,6 +30,7 @@ export default function ProgressPage() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
   const [recognitionFeedback, setRecognitionFeedback] = useState<RecognitionFeedbackEntry[]>([]);
+  const [phraseLog, setPhraseLog] = useState(readPhraseLog);
   const [signs, setSigns] = useState<SignMeta[]>([]);
   const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
 
@@ -57,6 +59,7 @@ export default function ProgressPage() {
 
   useEffect(() => {
     setRecognitionFeedback(readRecognitionFeedback());
+    setPhraseLog(readPhraseLog());
     fetchSigns(1).then(setSigns).catch(() => setSigns([]));
     loadRecognitionCalibration().then(setCalibration).catch(() => setCalibration(null));
   }, []);
@@ -73,6 +76,7 @@ export default function ProgressPage() {
     summary.total_attempts === 0 &&
     mastery.length === 0;
   const feedbackSummary = summarizeRecognitionFeedback(recognitionFeedback);
+  const phraseSummary = summarizePhraseLog(phraseLog);
   const learningPriorities: LearningPriority[] = buildLearningPriorities(signs, calibration, feedbackSummary).slice(0, 8);
   const confusionRows = Object.entries(calibration?.confusions ?? {})
     .map(([pair, row]) => ({ pair, ...row }))
@@ -262,6 +266,45 @@ export default function ProgressPage() {
                     Clear feedback
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+
+          <h2>Phrase practice</h2>
+          <div className="card">
+            {phraseSummary.total === 0 ? (
+              <p style={{ color: "var(--muted)", margin: 0 }}>
+                No phrase attempts yet. <Link to="/phrases">Start phrase mode</Link>.
+              </p>
+            ) : (
+              <>
+                <p style={{ marginTop: 0 }}>
+                  <strong>{phraseSummary.total}</strong> phrase attempts -{" "}
+                  <span className="status-pass">{phraseSummary.pass} signed</span> /{" "}
+                  <span className="status-retry">{phraseSummary.retry} retry</span>
+                </p>
+                <table className="compact-table">
+                  <thead>
+                    <tr>
+                      <th>Phrase</th>
+                      <th>Attempts</th>
+                      <th>Signed</th>
+                      <th>Retry</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(phraseSummary.byPhrase).map(([phrase, row]) => (
+                      <tr key={phrase}>
+                        <td>
+                          <code>{phrase}</code>
+                        </td>
+                        <td>{row.total}</td>
+                        <td>{row.pass}</td>
+                        <td>{row.retry}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </>
             )}
           </div>
