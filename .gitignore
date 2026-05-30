@@ -24,10 +24,14 @@ __pycache__/
 
 # Captured / generated dataset artifacts — large binaries, regenerable
 ml/data/clips/
+ml/data/hand_landmarks/
+ml/data/manifest.json
+ml/data/mediapipe/
 ml/data/raw/
 ml/data/incoming/
 ml/data/semlex/
 ml/checkpoints/
+ml/reports/
 
 # ml/data/learner_samples/ IS committed: ~12 MB of human-recorded webms
 # kept as a learner-quality reference set distinct from native-signer SemLex data.
