@@ -29,6 +29,7 @@ ml/data/manifest.json
 ml/data/mediapipe/
 ml/data/raw/
 ml/data/incoming/
+ml/data/incoming_online_aslcitizen/
 ml/data/semlex/
 ml/checkpoints/
 ml/reports/

@@ -107,10 +107,11 @@ def infer_meta(path: Path, data: dict | None) -> tuple[str, str]:
 VIDEO_EXTS = (".webm", ".mp4", ".mov", ".mkv", ".avi")
 
 
-def _reviewed_video_meta() -> dict[str, tuple[str | None, str | None]] | None:
+def _reviewed_video_meta(incoming: Path | None = None) -> dict[str, tuple[str | None, str | None]] | None:
     """Return accepted filename metadata from review/capture manifests, if present."""
+    incoming = incoming or INCOMING
     manifests = [
-        path for path in INCOMING.glob("*.json")
+        path for path in incoming.glob("*.json")
         if "manifest" in path.name.lower() or "capture_session" in path.name.lower()
     ]
     if not manifests:
@@ -133,27 +134,32 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser()
+    parser.add_argument("--in-dir", default=str(INCOMING),
+                        help="Directory containing source videos or legacy capture JSON files.")
     parser.add_argument("--resize-mode", choices=RESIZE_MODES, default="center_crop",
                         help="How raw videos are resized to square model frames.")
     args = parser.parse_args()
 
-    INCOMING.mkdir(parents=True, exist_ok=True)
+    incoming = Path(args.in_dir)
+    if not incoming.is_absolute():
+        incoming = ROOT / incoming
+    incoming.mkdir(parents=True, exist_ok=True)
     CLIPS.mkdir(parents=True, exist_ok=True)
     files: list[Path] = []
     for ext in VIDEO_EXTS:
-        files.extend(INCOMING.glob(f"*{ext}"))
-    reviewed_meta = _reviewed_video_meta()
+        files.extend(incoming.glob(f"*{ext}"))
+    reviewed_meta = _reviewed_video_meta(incoming)
     if reviewed_meta is not None:
         before = len(files)
         files = [path for path in files if path.name in reviewed_meta]
         print(f"Review manifest filter: {len(files)}/{before} video files accepted.")
     files.extend(
-        path for path in INCOMING.glob("*.json")
+        path for path in incoming.glob("*.json")
         if "manifest" not in path.name.lower() and "capture_session" not in path.name.lower()
     )  # legacy capture-page format
     files = sorted(files)
     if not files:
-        print(f"No video files in {INCOMING}. Expected one of {VIDEO_EXTS} or *.json.",
+        print(f"No video files in {incoming}. Expected one of {VIDEO_EXTS} or *.json.",
               file=sys.stderr)
         raise SystemExit(2)
 
