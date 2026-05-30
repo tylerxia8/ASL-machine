@@ -89,6 +89,7 @@ export default function PracticePage() {
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<Phase>("prompt");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraNeedsStart, setCameraNeedsStart] = useState(false);
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null);
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(readPracticeMode);
   const [practiceOrder, setPracticeOrder] = useState<PracticeOrder>(readPracticeOrder);
@@ -154,12 +155,20 @@ export default function PracticePage() {
 
   const startCamera = useCallback(async () => {
     setCameraError(null);
+    setCameraNeedsStart(false);
     try {
-      const stream = await requestCamera();
+      const stream = streamRef.current ?? await requestCamera();
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch (err) {
+          const name = (err as { name?: string })?.name ?? "unknown";
+          setCameraNeedsStart(true);
+          setCameraError(`Camera is ready, but the browser wants a button press first (${name}).`);
+          return;
+        }
       }
       trackEvent("camera_ok");
     } catch (e) {
@@ -554,7 +563,7 @@ export default function PracticePage() {
         <div className="card status-fail">
           <p>{cameraError}</p>
           <button className="btn" onClick={startCamera}>
-            Retry camera
+            {cameraNeedsStart ? "Start camera" : "Retry camera"}
           </button>
         </div>
       ) : (

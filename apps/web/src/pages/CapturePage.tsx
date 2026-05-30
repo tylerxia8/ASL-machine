@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/api";
 import { requestCamera, recordVideo, CameraError } from "../lib/camera";
@@ -46,6 +46,7 @@ export default function CapturePage() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [status, setStatus] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraNeedsStart, setCameraNeedsStart] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [countdown, setCountdown] = useState(3);
   const lastDownloadUrlRef = useRef<string | null>(null);
@@ -91,32 +92,36 @@ export default function CapturePage() {
     setCounts(raw ? JSON.parse(raw) : {});
   }, [signerId]);
 
-  useEffect(() => {
-    requestCamera()
-      .then((stream) => {
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          // play() can reject under autoplay policies; surface it instead of
-          // letting it disappear into an unhandled-promise-rejection.
-          videoRef.current.play().catch((err) => {
-            setCameraError(
-              `Browser blocked autoplay: ${err?.name ?? "unknown"}. ` +
-                "Click anywhere on the page, then refresh."
-            );
-          });
+  const startCamera = useCallback(async () => {
+    setCameraError(null);
+    setCameraNeedsStart(false);
+    try {
+      const stream = streamRef.current ?? await requestCamera();
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+        } catch (err) {
+          const name = (err as { name?: string })?.name ?? "unknown";
+          setCameraNeedsStart(true);
+          setCameraError(`Camera is ready, but the browser wants a button press first (${name}).`);
         }
-      })
-      .catch((e) => {
-        const code = (e as { code: CameraError }).code || "unknown";
-        setCameraError(CAMERA_HELP[code] || CAMERA_HELP.unknown);
-      });
+      }
+    } catch (e) {
+      const code = (e as { code: CameraError }).code || "unknown";
+      setCameraError(CAMERA_HELP[code] || CAMERA_HELP.unknown);
+    }
+  }, []);
+
+  useEffect(() => {
+    void startCamera();
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       if (lastDownloadUrlRef.current) URL.revokeObjectURL(lastDownloadUrlRef.current);
     };
-  }, []);
+  }, [startCamera]);
 
   const progress = useMemo(() => {
     const done = signs.filter((s) => (counts[s.sign_id] ?? 0) >= TARGET_PER_SIGN).length;
@@ -289,6 +294,9 @@ export default function CapturePage() {
       {cameraError ? (
         <div className="card status-fail">
           <p>{cameraError}</p>
+          <button className="btn" type="button" onClick={startCamera}>
+            {cameraNeedsStart ? "Start camera" : "Retry camera"}
+          </button>
         </div>
       ) : (
         <div className="video-wrap" style={{ position: "relative" }}>
