@@ -30,6 +30,8 @@ ml/data/mediapipe/
 ml/data/raw/
 ml/data/incoming/
 ml/data/incoming_online_aslcitizen/
+ml/data/incoming_online_wlasl/
+ml/data/external_indexes/
 ml/data/semlex/
 ml/checkpoints/
 ml/reports/

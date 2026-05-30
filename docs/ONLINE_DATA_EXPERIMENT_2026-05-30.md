@@ -7,7 +7,7 @@ Used the official Microsoft Research ASL Citizen archive through `ml/scripts/fet
 Secondary sources considered:
 
 - Sem-Lex remains the preferred native-signer source for the promoted model.
-- WLASL/ASLLVD may contain extra `five` / `eat` examples, but they were not imported in this pass because ASL Citizen is already wired into the project pipeline and has cleaner isolated-sign coverage for most Wave 1 signs.
+- WLASL contains a small public-index `five` set. The project fetcher downloads direct MP4 URLs only and skips YouTube entries unless a future pass adds a dedicated clipping workflow.
 
 ## Import Result
 
@@ -15,19 +15,22 @@ Command:
 
 ```bash
 python ml/scripts/fetch_asl_citizen.py --clips-per-sign 20 --out-dir ml/data/incoming_online_aslcitizen
+python ml/scripts/fetch_wlasl.py --signs five --clips-per-sign 20 --out-dir ml/data/incoming_online_wlasl
 python ml/scripts/import_captures.py --in-dir ml/data/incoming_online_aslcitizen --resize-mode letterbox
+python ml/scripts/import_captures.py --in-dir ml/data/incoming_online_wlasl --resize-mode letterbox
 python ml/scripts/build_manifest.py --wave1 --signer-disjoint
 python ml/scripts/extract_hand_landmarks.py --manifest ml/data/manifest.json --out-dir ml/data/hand_landmarks
 ```
 
 Results:
 
-- ASL Citizen downloaded/imported: 460 clips, 0 import failures.
-- Combined local dataset after adding learner recordings: 529 clips, 24 signs, 38 signers.
-- Signer-disjoint split: 332 train, 48 val, 149 test.
-- Hand landmark coverage: 6244/12696 frames, 49.2%.
-- Missing from ASL Citizen Wave 1 fetch: `five`, `eat`.
-- `five` is present only from learner recordings, so it has no signer-disjoint held-out test support.
+- ASL Citizen downloaded/imported: 480 clips after adding the `EAT1` / `EAT2` gloss mapping.
+- WLASL direct MP4 supplement: 3 `five` clips. The ASL SignBank URL failed TLS hostname validation, Handspeak/SigningSavvy returned 403, and the YouTube entry was skipped by default.
+- Combined local dataset after adding learner recordings: 552 clips, 25 signs, 41 signers.
+- Signer-disjoint split: 360 train, 55 val, 137 test.
+- Hand landmark coverage: 6481/13248 frames, 48.9%.
+- Missing from ASL Citizen Wave 1 fetch after the gloss-map fix: `five`.
+- `five` now has a small WLASL supplement, but held-out support is still thin: 17 train, 3 val, 1 test.
 
 ## Experimental Training
 
@@ -37,27 +40,27 @@ Trained a local measurement-only model:
 python ml/train_landmarks.py \
   --manifest ml/data/manifest.json \
   --feature-dir ml/data/hand_landmarks \
-  --epochs 25 \
+  --epochs 30 \
   --batch-size 32 \
-  --model-version wave1-aslcitizen-learner-v24-local \
-  --early-stop-patience 6 \
+  --model-version wave1-aslcitizen-wlasl-learner-v25-local \
+  --early-stop-patience 7 \
   --min-feature-coverage 0.10
 ```
 
 Results:
 
-- Validation accuracy: 77.08%.
-- Signer-disjoint test accuracy: 72.48%.
-- Macro F1: 0.699.
-- Weighted F1: 0.726.
-- `who` test recall improved to 0.67 in this experimental model, but this model is not promotable as-is because it has only 24 classes and excludes `eat`.
+- Validation accuracy: 80.00%.
+- Signer-disjoint test accuracy: 65.69%.
+- Macro F1: 0.655.
+- Weighted F1: 0.656.
+- This run is source-complete for the 25-label Wave 1 roster, but it underperforms the current promoted v23 model and should not be promoted.
 
 ## Recommendation
 
-Do not promote this local v24 experiment to the app. Use it as evidence that ASL Citizen is useful supplemental data, then run the next promotable training job with Sem-Lex plus ASL Citizen plus learner clips in one 25-class pipeline.
+Do not promote this local v25 experiment to the app. Use the source pipeline in the next promotable Sem-Lex plus ASL Citizen plus WLASL plus learner training job, then promote only if signer-disjoint metrics beat the current v23 baseline.
 
 Most important remaining data gaps:
 
-1. `five`: needs native/public signer diversity or more self-recorded variation.
-2. `eat`: needs public signer clips from Sem-Lex or another compatible source.
+1. `five`: needs more native/public signer diversity or more self-recorded variation. The current WLASL direct-MP4 supplement is useful but too small.
+2. `eat`: use the ASL Citizen `EAT1` / `EAT2` mapping plus Sem-Lex in the next full training run.
 3. `how`, `who`, `deaf`, `friend`: keep as watchlist signs because they still showed weaker held-out recall than the easier classes.

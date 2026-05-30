@@ -41,6 +41,7 @@ GLOSS_MAP_DEFAULT: dict[str, list[str]] = {
     "goodbye": ["GOODBYE", "BYE"],
     "thank_you": ["THANKYOU", "THANKS"],
     "how": ["HOW", "HOW1", "HOW2"],
+    "eat": ["EAT", "EAT1", "EAT2"],
     "deaf": ["DEAF", "DEAF1", "DEAF2"],
 }
 

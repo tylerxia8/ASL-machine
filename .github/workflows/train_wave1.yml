@@ -61,7 +61,7 @@ on:
       asl_citizen_signs:
         description: "Comma-separated signs to pull from ASL Citizen; blank means Wave 1"
         type: string
-        default: "four,who,goodbye,how,deaf,hello,please,thank_you,sorry,no,yes,three"
+        default: ""
       asl_citizen_clips_per_sign:
         description: "Cap per sign when pulling ASL Citizen"
         type: number
@@ -70,6 +70,18 @@ on:
         description: "Which ASL Citizen splits to pull"
         type: string
         default: "train,val,test"
+      include_wlasl:
+        description: "Add direct-MP4 WLASL clips, useful for signs missing from ASL Citizen"
+        type: boolean
+        default: false
+      wlasl_signs:
+        description: "Comma-separated signs to pull from WLASL direct video URLs"
+        type: string
+        default: "five"
+      wlasl_clips_per_sign:
+        description: "Cap per sign when pulling WLASL"
+        type: number
+        default: 20
       epochs:
         description: "Training epochs"
         type: number
@@ -264,6 +276,16 @@ jobs:
             --signs "${{ inputs.asl_citizen_signs }}" \
             --splits "${{ inputs.asl_citizen_splits }}" \
             --clips-per-sign ${{ inputs.asl_citizen_clips_per_sign }} \
+            --out-dir ml/data/incoming
+
+      - name: Fetch WLASL direct-video supplement
+        if: inputs.include_wlasl
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          python ml/scripts/fetch_wlasl.py \
+            --signs "${{ inputs.wlasl_signs }}" \
+            --clips-per-sign ${{ inputs.wlasl_clips_per_sign }} \
             --out-dir ml/data/incoming
 
       - name: Show staged video summary
@@ -487,6 +509,8 @@ jobs:
           body: |
             Trained from scratch on dataset source: `${{ inputs.dataset_source }}`.
             Sem-Lex splits used: `${{ inputs.semlex_splits }}`.
+            ASL Citizen included: `${{ inputs.include_asl_citizen }}`.
+            WLASL included: `${{ inputs.include_wlasl }}`.
             Epochs: ${{ inputs.epochs }}.
             Model size: `${{ inputs.model_size }}`.
             Preprocess: `${{ inputs.preprocess }}`.
