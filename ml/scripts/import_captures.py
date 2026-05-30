@@ -118,7 +118,7 @@ def _reviewed_video_meta() -> dict[str, tuple[str | None, str | None]] | None:
     accepted: dict[str, tuple[str | None, str | None]] = {}
     for manifest in manifests:
         try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data = json.loads(manifest.read_text(encoding="utf-8-sig"))
         except json.JSONDecodeError:
             continue
         for clip in data.get("clips", []):
