@@ -78,10 +78,6 @@ on:
         description: "Comma-separated signs to pull from WLASL direct video URLs"
         type: string
         default: "five"
-      wlasl_clips_per_sign:
-        description: "Cap per sign when pulling WLASL"
-        type: number
-        default: 20
       epochs:
         description: "Training epochs"
         type: number
@@ -285,7 +281,7 @@ jobs:
         run: |
           python ml/scripts/fetch_wlasl.py \
             --signs "${{ inputs.wlasl_signs }}" \
-            --clips-per-sign ${{ inputs.wlasl_clips_per_sign }} \
+            --clips-per-sign 20 \
             --out-dir ml/data/incoming
 
       - name: Show staged video summary
