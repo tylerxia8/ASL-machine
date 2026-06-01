@@ -21,7 +21,7 @@ That relaxes the old "no pretrained landmark detectors" rubric constraint.
 
 The RGB-only Sem-Lex runs did not generalize well to signer-disjoint evaluation:
 
-- Best bundled integration model: `wave1-semlex-full-v8`, 14.09% accuracy
+- Best RGB-only integration model: `wave1-semlex-full-v8`, 14.09% accuracy
 - Best macro-F1 diagnostic run: `wave1-semlex-full-v17-motion-tcn-fixed15`,
   5.70% accuracy, macro F1 0.04030
 
@@ -31,6 +31,8 @@ background, framing, lighting, and signer appearance.
 
 Hand landmarks remove much of that nuisance variation and feed the classifier
 the geometry most relevant to beginner Wave 1 signs.
+
+The current bundled hand-landmark model is `wave1-semlex-aslcitizen-wlasl-v27-v23recipe`, which reaches 81.84% signer-disjoint clip-level accuracy, macro F1 0.745, and weighted F1 0.819 across the 25-sign Wave 1 roster.
 
 ## Current Implementation Status
 

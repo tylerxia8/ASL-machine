@@ -53,11 +53,11 @@ Results:
 - Signer-disjoint test accuracy: 65.69%.
 - Macro F1: 0.655.
 - Weighted F1: 0.656.
-- This run is source-complete for the 25-label Wave 1 roster, but it underperforms the current promoted v23 model and should not be promoted.
+- This run is source-complete for the 25-label Wave 1 roster, but it underperformed the promoted v23 model that was current at the time and should not be promoted.
 
 ## Recommendation
 
-Do not promote this local v25 experiment to the app. Use the source pipeline in the next promotable Sem-Lex plus ASL Citizen plus WLASL plus learner training job, then promote only if signer-disjoint metrics beat the current v23 baseline.
+Do not promote this local v25 experiment to the app. The follow-up GitHub Actions run `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` used the same source pipeline with the stronger v23-style training recipe and should replace v23: accuracy 81.84%, macro F1 0.745, weighted F1 0.819, with the comparison script recommending PROMOTE.
 
 Most important remaining data gaps:
 

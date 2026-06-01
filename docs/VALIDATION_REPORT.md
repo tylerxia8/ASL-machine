@@ -1,7 +1,7 @@
 # Validation Report — Wave 1
 
-> **Status: validated on the `wave1-semlex-full-v8` release, but not yet pilot-ready.**
-> The auto-metrics block below was populated by `ml/eval.py` from the release checkpoint. Accuracy is currently low, so the model should be treated as an integration/demo model until more data and retraining improve signer-disjoint performance.
+> **Status: validated on the `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` release.**
+> The auto-metrics block below was populated by the GitHub Actions training workflow from the release checkpoint. This is the current bundled model; use the limitations section to understand weak signs and operating constraints.
 
 ## Pilot scope
 
@@ -13,23 +13,23 @@ This report covers the controlled production pilot of the ASL Learning with Comp
 
 ## Model approach
 
-- **Architecture:** [`SignClipCNN3D`](../ml/model.py) — three Conv3d blocks (32→64→128 channels) with BatchNorm + ReLU, followed by a fixed-kernel AvgPool3d(3,8,8) and a 256-unit fully-connected head. ~3.57M parameters total.
-- **Training from scratch:** all weights initialized with Kaiming-normal. No pretrained backbones, no pretrained landmark/pose detectors, no pretrained sign classifiers. See [`NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md) for the attestation.
-- **Input:** 24 RGB frames at 160×160, captured over a 2-second window (≈12 fps effective). Center-cropped to a square; pixel values normalized to [0, 1].
-- **Loss / optimizer:** cross-entropy, Adam-family training from scratch through the Wave 1 GitHub Actions workflow. The release metadata reports checkpoint validation accuracy of 8.79%.
-- **Augmentations applied during training:** _none in the v1 pipeline._ If signer-disjoint accuracy is weak, add horizontal flip, temporal jitter ±2 frames, and ±15% brightness/contrast (see [`ml/dataset.py`](../ml/dataset.py)).
+- **Architecture:** hand-landmark TCN (`hand_landmark_tcn`) trained by [`ml/train_landmarks.py`](../ml/train_landmarks.py). It consumes 24 frames of MediaPipe Hands landmarks, using 132 landmark features per frame.
+- **Training from scratch:** the recognition network weights are initialized and trained from scratch. MediaPipe Hands is used only as the on-device hand landmark detector; no pretrained sign classifier or pretrained sign-language model is used. See [`NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md) for the attestation.
+- **Input:** 24 hand-landmark frames extracted from letterboxed video clips.
+- **Loss / optimizer:** cross-entropy, Adam-family training from scratch through the Wave 1 GitHub Actions workflow. The release metadata reports checkpoint validation accuracy of 85.71%.
+- **Augmentations applied during training:** hand-landmark Gaussian noise (`0.02`) and frame dropout (`0.10`) in the landmark training pipeline.
 
 ## Dataset
 
 | Property | Value |
 |---|---|
-| Signers | Sem-Lex signer IDs |
+| Signers | Sem-Lex signer IDs plus ASL Citizen/WLASL supplement signer IDs |
 | Clips per sign per signer | Variable from Sem-Lex availability |
-| Total clips | Release artifact exports 220 signer-disjoint test clips; full train/val manifest was generated in CI but not bundled in this repo |
+| Total clips | 2,132 clips in the v27 manifest: 954 train, 154 val, 1,024 signer-disjoint test |
 | Train/Val/Test split | Signer-disjoint when ≥3 signers; otherwise random 70/15/15 within signers |
-| Lighting conditions | Sem-Lex conditions vary |
-| Background | Sem-Lex conditions vary |
-| Capture sessions | Sem-Lex source sessions |
+| Lighting conditions | Sem-Lex/ASL Citizen/WLASL source conditions vary |
+| Background | Source dataset conditions vary |
+| Capture sessions | Source dataset sessions plus local learner smoke/calibration clips |
 
 See [`CONTROLLED_CONDITIONS.md`](CONTROLLED_CONDITIONS.md) for the operational protocol.
 
@@ -90,89 +90,80 @@ The 0.90 pass bar is deliberately strict — Requirement 9 says "avoid marking u
 > This block is overwritten by `python ml/eval.py`. Edit the narrative
 > sections above/below; do not edit between these markers.
 
-**Model version:** `wave1-semlex-aslcitizen-v23-augmented-landmarks`  
-**Test accuracy (clip-level, signer-disjoint):** 81.04%  
-**Classes:** 25  
-**Checkpoint val accuracy:** 0.8897058823529411  
+**Model version:** `wave1-semlex-aslcitizen-wlasl-v27-v23recipe`
+**Test accuracy (clip-level, signer-disjoint):** 81.84%
+**Classes:** 25
+**Checkpoint val accuracy:** 0.8571428571428571
 **Confusion matrix shape:** 25×25
 
 ### Per-class metrics
 
 | Sign | Precision | Recall | F1 | Support |
 |------|-----------|--------|------|---------|
-| deaf | 0.70 | 0.61 | 0.65 | 61 |
-| eat | 0.91 | 0.92 | 0.91 | 332 |
+| deaf | 0.79 | 0.71 | 0.75 | 62 |
+| eat | 0.93 | 0.87 | 0.90 | 75 |
 | five | 0.00 | 0.00 | 0.00 | 1 |
-| four | 0.00 | 0.00 | 0.00 | 2 |
-| friend | 0.91 | 0.87 | 0.89 | 68 |
-| goodbye | 0.34 | 1.00 | 0.51 | 11 |
-| hello | 0.89 | 0.85 | 0.87 | 20 |
-| help | 0.95 | 0.65 | 0.77 | 88 |
-| how | 0.28 | 0.69 | 0.40 | 13 |
-| meet | 1.00 | 0.65 | 0.78 | 31 |
-| name | 1.00 | 0.88 | 0.93 | 48 |
-| nice | 0.77 | 0.85 | 0.81 | 60 |
-| no | 0.78 | 0.66 | 0.71 | 38 |
-| one | 0.90 | 0.80 | 0.85 | 35 |
-| please | 0.50 | 0.77 | 0.61 | 13 |
-| sleep | 0.81 | 0.66 | 0.73 | 93 |
-| sorry | 0.91 | 0.91 | 0.91 | 32 |
-| thank_you | 0.54 | 0.95 | 0.69 | 20 |
-| three | 0.45 | 0.90 | 0.60 | 10 |
-| two | 1.00 | 0.44 | 0.62 | 27 |
-| water | 0.98 | 0.98 | 0.98 | 204 |
-| what | 0.80 | 0.70 | 0.74 | 46 |
-| where | 0.71 | 0.83 | 0.76 | 81 |
-| who | 0.47 | 0.51 | 0.49 | 51 |
-| yes | 0.60 | 0.74 | 0.66 | 34 |
-| **macro avg** | 0.69 | 0.71 | 0.67 | 1419 |
+| four | 0.25 | 0.33 | 0.29 | 3 |
+| friend | 0.91 | 0.89 | 0.90 | 65 |
+| goodbye | 0.50 | 0.77 | 0.61 | 13 |
+| hello | 0.77 | 0.74 | 0.76 | 23 |
+| help | 0.89 | 0.78 | 0.83 | 86 |
+| how | 0.55 | 0.86 | 0.67 | 14 |
+| meet | 0.81 | 0.76 | 0.79 | 34 |
+| name | 0.92 | 0.96 | 0.94 | 51 |
+| nice | 0.84 | 0.86 | 0.85 | 69 |
+| no | 0.86 | 0.64 | 0.74 | 39 |
+| one | 0.95 | 0.88 | 0.91 | 40 |
+| please | 1.00 | 0.71 | 0.83 | 14 |
+| sleep | 0.91 | 0.84 | 0.88 | 58 |
+| sorry | 0.94 | 0.97 | 0.96 | 33 |
+| thank_you | 0.67 | 0.95 | 0.78 | 19 |
+| three | 0.53 | 0.90 | 0.67 | 10 |
+| two | 0.95 | 0.73 | 0.83 | 26 |
+| water | 0.94 | 0.99 | 0.96 | 69 |
+| what | 0.82 | 0.74 | 0.78 | 54 |
+| where | 0.73 | 0.89 | 0.80 | 79 |
+| who | 0.65 | 0.48 | 0.55 | 54 |
+| yes | 0.57 | 0.88 | 0.69 | 33 |
+| **macro avg** | 0.75 | 0.76 | 0.75 | 1024 |
 
 ### Most-confused pairs (top 10)
 
 | True → | Predicted | Count |
 |--------|-----------|-------|
-| sleep | eat | 21 |
-| help | how | 15 |
-| who | where | 12 |
-| eat | sleep | 11 |
-| deaf | where | 11 |
-| help | nice | 9 |
+| who | where | 16 |
+| help | nice | 8 |
 | deaf | who | 8 |
 | who | yes | 7 |
-| two | three | 7 |
-| who | deaf | 5 |
+| no | yes | 6 |
+| deaf | where | 6 |
+| sleep | eat | 5 |
+| what | yes | 4 |
+| nice | help | 4 |
+| help | what | 4 |
 
 ### Confidence calibration
 
 | Confidence | Clips | Correct | Accuracy |
 |------------|-------|---------|----------|
 | 0.0-0.1 | 0 | 0 | n/a |
-| 0.1-0.2 | 8 | 1 | 12.50% |
-| 0.2-0.3 | 36 | 10 | 27.78% |
-| 0.3-0.4 | 45 | 8 | 17.78% |
-| 0.4-0.5 | 60 | 26 | 43.33% |
-| 0.5-0.6 | 66 | 37 | 56.06% |
-| 0.6-0.7 | 82 | 50 | 60.98% |
-| 0.7-0.8 | 80 | 52 | 65.00% |
-| 0.8-0.9 | 109 | 77 | 70.64% |
-| 0.9-1.0 | 933 | 889 | 95.28% |
+| 0.1-0.2 | 4 | 1 | 25.00% |
+| 0.2-0.3 | 20 | 5 | 25.00% |
+| 0.3-0.4 | 30 | 5 | 16.67% |
+| 0.4-0.5 | 35 | 14 | 40.00% |
+| 0.5-0.6 | 52 | 24 | 46.15% |
+| 0.6-0.7 | 48 | 34 | 70.83% |
+| 0.7-0.8 | 51 | 35 | 68.63% |
+| 0.8-0.9 | 103 | 77 | 74.76% |
+| 0.9-1.0 | 681 | 643 | 94.42% |
 
 <!-- AUTO-METRICS:END -->
 
 ## Confidence calibration
 
-The `wave1-semlex-full-v8` release artifact does not include per-clip confidence values, so a calibration histogram cannot be reconstructed for that bundled model. [`ml/eval.py`](../ml/eval.py) now writes per-clip predictions plus 0.1-wide confidence bins into `eval_metrics.json` and the auto-metrics block.
+The v27 release includes per-clip confidence values. The 0.9-1.0 confidence bin is accurate on 94.42% of held-out clips, which supports a strict pass threshold in the browser. Mid-confidence bins are less reliable and should continue to produce retry/fail guidance instead of automatic success.
 
-The follow-up `wave1-semlex-full-v10-hardened` run produced calibration data, but it did not beat v8 and should not replace the bundled model. Its predictions were mostly low-confidence:
-
-| Confidence bin | Clips | Correct | Accuracy |
-|---|---:|---:|---:|
-| 0.0-0.1 | 204 | 10 | 4.9% |
-| 0.1-0.2 | 16 | 0 | 0.0% |
-
-There were no predictions above 0.2 confidence in that run.
-
-If the model is overconfident on errors (a common failure mode of from-scratch CNNs on small datasets), consider:
+If the model is overconfident on errors, consider:
 
 - Raising the pass threshold to 0.95
 - Adding temperature scaling in `ml/eval.py` before the threshold check
@@ -180,27 +171,27 @@ If the model is overconfident on errors (a common failure mode of from-scratch C
 
 ## Known limitations
 
-Concrete observations from `wave1-semlex-full-v8`:
+Concrete observations from `wave1-semlex-aslcitizen-wlasl-v27-v23recipe`:
 
-- **Current model is not pilot-quality.** Test accuracy is 14.09% with macro F1 0.01. The model collapses heavily toward `where`, so it is useful for end-to-end app integration but not reliable learner assessment.
-- **Same-data retraining did not fix collapse.** `wave1-semlex-full-v9` tied v8 at 14.09% accuracy but had slightly lower macro F1; `wave1-semlex-full-v9-small` dropped to 8.18% accuracy; `wave1-semlex-full-v10-hardened` dropped to 4.55% accuracy with macro F1 0.01141; `wave1-semlex-full-v11-lr3e4-small` dropped to 3.18% accuracy with macro F1 0.00561; `wave1-semlex-full-v12-frame` reached 4.55% accuracy with macro F1 0.01601; `wave1-semlex-full-v13-tcn` reached 6.82% accuracy with macro F1 0.02255; `wave1-semlex-full-v14-tcn-balanced-split` reached 5.70% accuracy with macro F1 0.03441 after fixing zero-test-support split coverage; `wave1-semlex-full-v15-tcn-letterbox` reached 6.07% accuracy with macro F1 0.02845; `wave1-semlex-full-v16-motion-tcn` reached 5.51% accuracy with macro F1 0.02574; `wave1-semlex-full-v17-motion-tcn-fixed15` reached 5.70% accuracy with macro F1 0.04030. V17 is the best macro-F1 result so far and has better prediction diversity, but none beat the v8 bundled accuracy. The next meaningful lever is a stronger model/data strategy and a product fallback/self-check path, not another whole-frame CNN run with minor hyperparameter changes.
-- **`five` has zero test support in this release.** Accuracy for that class is unknown until the evaluation split includes held-out clips.
-- **Highest observed confusion pattern:** many classes are predicted as `where` (`who`, `help`, `friend`, `nice`, `deaf`, `water`, `eat`, `what`, `name`, `sleep`).
+- **Overall recognition is substantially better than the earlier RGB model family.** The v27 hand-landmark model reaches 81.84% signer-disjoint clip-level accuracy, macro F1 0.745, and weighted F1 0.819.
+- **`five` remains a data gap.** It has only one held-out test clip and 0.00 F1, even after the small WLASL direct-MP4 supplement. It should stay in the learning content, but recognition results for `five` should be treated conservatively until more signer-diverse clips are available.
+- **`four` and `who` are the main weak recognition classes.** `four` has only three test clips and 0.29 F1; `who` has 0.55 F1 and is most often confused with `where`.
+- **Highest observed confusion pattern:** `who -> where` remains the largest pair, followed by `help -> nice`, `deaf -> who`, and `who -> yes`.
 
 General limitations:
 
-- **Small-sample generalization.** Two signers cannot cover the variation of all hand shapes, sizes, skin tones, and signing styles. Held-out signer accuracy is the relevant metric, not in-signer accuracy.
-- **No pose/landmark backbone.** Whole-frame 3D CNN trained from scratch on ~1,500 clips will plateau well below research benchmarks that use pretrained MediaPipe/OpenPose features. The pilot is not classroom-assessment-grade.
+- **Small-sample generalization.** Source datasets still cannot cover the full variation of hand shapes, sizes, skin tones, camera angles, and signing styles. Held-out signer accuracy is the relevant metric, not in-signer accuracy.
+- **Detector dependence.** The recognizer depends on MediaPipe Hands landmarks. If the detector misses hands because of cropping, lighting, motion blur, or occlusion, the downstream classifier will be unreliable.
 - **Confusable pairs already identified in the 25-sign set:**
-  - **please / sorry** — both chest circles; differ only in handshape (flat-B vs S-fist).
-  - **what / where** — both shaking motions; differ in handshape (5-open vs 1-index).
-  - **four / five** — only the thumb position differs.
-  - **one / two / three** — static handshapes; sensitive to finger precision.
+  - **please / sorry** ? both chest circles; differ only in handshape (flat-B vs S-fist).
+  - **what / where** ? both shaking motions; differ in handshape (5-open vs 1-index).
+  - **four / five** ? only the thumb position differs.
+  - **one / two / three** ? static handshapes; sensitive to finger precision.
 - **Operating envelope.** Accuracy is documented under the conditions in [`CONTROLLED_CONDITIONS.md`](CONTROLLED_CONDITIONS.md). Performance outside that envelope (poor lighting, off-axis camera, hands cropped) is undefined.
 
 ## Privacy
 
-See [`PRIVACY.md`](PRIVACY.md). Inference is browser-local. The API receives only `{sign_id, outcome, confidence, predicted_label}` per attempt — no images, no audio, no biometric features. Raw `.webm` captures stay on the data-collector's local disk and are not transmitted by the practice flow.
+See [`PRIVACY.md`](PRIVACY.md). Inference is browser-local. The API receives only `{sign_id, outcome, confidence, predicted_label}` per attempt ? no images, no audio, no biometric features. Raw `.webm` captures stay on the data-collector's local disk and are not transmitted by the practice flow.
 
 ## Pretrained-model attestation
 
@@ -210,8 +201,8 @@ See [`NO_PRETRAINED_MODELS.md`](NO_PRETRAINED_MODELS.md). Grep evidence and depe
 
 | Field | Value |
 |---|---|
-| Report version | 0.2 (`wave1-semlex-full-v8`) |
-| Last metrics run | 2026-05-26 release artifact |
-| Trained checkpoint | GitHub Actions release `wave1-semlex-full-v8` |
-| Exported ONNX | `apps/web/public/models/model.onnx` and release asset `wave1-semlex-full-v8/model.onnx` |
+| Report version | 0.3 (`wave1-semlex-aslcitizen-wlasl-v27-v23recipe`) |
+| Last metrics run | 2026-05-31 release artifact |
+| Trained checkpoint | GitHub Actions release `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` |
+| Exported ONNX | `apps/web/public/models/model.onnx` and release asset `wave1-semlex-aslcitizen-wlasl-v27-v23recipe/model.onnx` |
 | Reviewer | _name + date_ |
