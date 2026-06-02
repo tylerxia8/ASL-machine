@@ -82,6 +82,10 @@ on:
         description: "Training epochs"
         type: number
         default: 20
+      batch_size:
+        description: "Training batch size"
+        type: number
+        default: 32
       learning_rate:
         description: "Adam learning rate passed to ml/train.py"
         type: string
@@ -377,6 +381,7 @@ jobs:
             --epochs ${{ inputs.epochs }} \
             --model-version ${{ inputs.model_version }} \
             --model-size ${{ inputs.model_size }} \
+            --batch-size ${{ inputs.batch_size }} \
             --lr ${{ inputs.learning_rate }} \
             --weight-decay ${{ inputs.weight_decay }} \
             --label-smoothing ${{ inputs.label_smoothing }} \
@@ -394,6 +399,7 @@ jobs:
             --feature-dir ml/data/hand_landmarks \
             --epochs ${{ inputs.epochs }} \
             --model-version ${{ inputs.model_version }} \
+            --batch-size ${{ inputs.batch_size }} \
             --lr ${{ inputs.learning_rate }} \
             --weight-decay ${{ inputs.weight_decay }} \
             --label-smoothing ${{ inputs.label_smoothing }} \
@@ -512,6 +518,7 @@ jobs:
             ASL Citizen included: `${{ inputs.include_asl_citizen }}`.
             WLASL/ASLLVD included: `${{ inputs.include_wlasl }}`.
             Epochs: ${{ inputs.epochs }}.
+            Batch size: ${{ inputs.batch_size }}.
             Model size: `${{ inputs.model_size }}`.
             Preprocess: `${{ inputs.preprocess }}`.
             Learning rate: `${{ inputs.learning_rate }}`.
