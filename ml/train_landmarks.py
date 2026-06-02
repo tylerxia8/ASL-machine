@@ -18,6 +18,34 @@ ROOT = Path(__file__).resolve().parent.parent
 ML_ROOT = Path(__file__).resolve().parent
 
 
+def _source_key(signer_id: str) -> str:
+    if signer_id == "signer_a":
+        return "learner"
+    for source in ("semlex", "aslcitizen", "wlasl", "asllvd", "popsign"):
+        if signer_id.startswith(f"signer_{source}"):
+            return source
+    return "unknown"
+
+
+def _parse_source_weights(value: str) -> dict[str, float]:
+    weights: dict[str, float] = {}
+    for part in value.split(","):
+        if not part.strip():
+            continue
+        if "=" not in part:
+            raise ValueError(f"Bad source weight {part!r}; expected source=weight")
+        source, raw_weight = part.split("=", 1)
+        source = source.strip().lower()
+        try:
+            weight = float(raw_weight)
+        except ValueError as exc:
+            raise ValueError(f"Bad source weight {part!r}; weight must be numeric") from exc
+        if weight < 0:
+            raise ValueError(f"Bad source weight {part!r}; weight must be >= 0")
+        weights[source] = weight
+    return weights
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", default=str(ML_ROOT / "data" / "manifest.json"))
@@ -33,6 +61,15 @@ def main():
     parser.add_argument("--min-feature-coverage", type=float, default=0.20)
     parser.add_argument("--landmark-noise-std", type=float, default=0.01)
     parser.add_argument("--landmark-dropout-prob", type=float, default=0.05)
+    parser.add_argument(
+        "--source-weights",
+        default="",
+        help=(
+            "Optional comma-separated sampling multipliers by source, e.g. "
+            "semlex=1,aslcitizen=1,wlasl=0.7,popsign=0.35. "
+            "Applied on top of per-class balancing."
+        ),
+    )
     args = parser.parse_args()
 
     manifest_path = Path(args.manifest)
@@ -59,13 +96,22 @@ def main():
 
     train_labels = [label_to_idx[row["sign_id"]] for row in train_ds.items]
     class_counts = Counter(train_labels)
-    sample_weights = [1.0 / max(class_counts[label], 1) for label in train_labels]
+    source_weights = _parse_source_weights(args.source_weights)
+    source_counts = Counter(_source_key(row["signer_id"]) for row in train_ds.items)
+    sample_weights = [
+        (1.0 / max(class_counts[label], 1))
+        * source_weights.get(_source_key(row["signer_id"]), source_weights.get("unknown", 1.0))
+        for row, label in zip(train_ds.items, train_labels)
+    ]
     sampler = WeightedRandomSampler(sample_weights, num_samples=len(train_ds), replacement=True)
 
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, sampler=sampler, num_workers=0)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     print(f"Dataset: {len(train_ds)} train, {len(val_ds)} val, {len(sign_ids)} classes")
+    print(f"Training source counts: {dict(sorted(source_counts.items()))}")
+    if source_weights:
+        print(f"Training source sampling multipliers: {dict(sorted(source_weights.items()))}")
     dropped = train_ds.missing_features_count + val_ds.missing_features_count
     if dropped:
         print(
@@ -155,6 +201,7 @@ def main():
                     "min_feature_coverage": args.min_feature_coverage,
                     "landmark_noise_std": args.landmark_noise_std,
                     "landmark_dropout_prob": args.landmark_dropout_prob,
+                    "source_weights": source_weights,
                 },
                 ckpt_dir / "best.pt",
             )
@@ -184,6 +231,7 @@ def main():
                 "min_feature_coverage": args.min_feature_coverage,
                 "landmark_noise_std": args.landmark_noise_std,
                 "landmark_dropout_prob": args.landmark_dropout_prob,
+                "source_weights": source_weights,
             },
             f,
             indent=2,

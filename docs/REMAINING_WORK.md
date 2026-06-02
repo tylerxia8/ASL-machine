@@ -32,6 +32,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` | Same as v27 plus ASLLVD `five` clips | 80.47% test accuracy, macro F1 0.740, weighted F1 0.809. Do not promote; `please` regressed. |
 | `wave1-semlex-aslcitizen-wlasl-v29-bs16` | Same source family as v27, ASLLVD disabled, batch size 16 | 76.85% test accuracy, macro F1 0.713, weighted F1 0.767. Do not promote; `deaf` and `who` regressed. |
 | `wave1-semlex-aslcitizen-wlasl-asllvd-v30-weak5` | v27 recipe plus targeted WLASL/ASLLVD clips for `five,four,who,goodbye,deaf` | 80.49% test accuracy, macro F1 0.769, weighted F1 0.802. Do not promote; macro F1 improved but `deaf` regressed and accuracy/weighted F1 dropped. |
+| `wave1-semlex-aslcitizen-wlasl-popsign-v31` | v27 recipe plus WLASL and PopSign clips for selected weak/common signs; ASLLVD disabled | 76.80% test accuracy, macro F1 0.754, weighted F1 0.767. Do not promote; `please`, `goodbye`, `four`, and `hello` improved, but `deaf`, `sleep`, accuracy, and weighted F1 regressed. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
@@ -133,6 +134,8 @@ Local training hardening now added and verified in the v10 run:
 - The training workflow exposes trainer hyperparameters (`learning_rate`, `batch_size`, `weight_decay`, `label_smoothing`, `max_grad_norm`, `early_stop_patience`) so experiments do not require code edits
 - The training workflow supports `preprocess=center_crop|letterbox`; exported labels include the preprocessing mode so browser inference can match the trained model's frame transform
 - The training workflow can now run WLASL and ASLLVD supplements independently, so WLASL-only baselines remain reproducible while ASLLVD experiments stay explicit.
+- The training workflow now also fetches capped PopSign clips through the existing WLASL supplement toggle. PopSign adds learner-style variation for signs it contains, but v31 showed broad PopSign mixing should not replace v27 without source weighting or narrower sign selection.
+- `ml/train_landmarks.py` now accepts `--source-weights` sampling multipliers on top of per-class balancing, and the workflow exposes that as `source_weights`. This lets future runs down-weight sources like `popsign` or `wlasl` without changing fetch coverage.
 - `ml/scripts/manifest_report.py` reports split/sign/signer coverage before training and is uploaded as `manifest_report.json` with future releases
 - `ml/scripts/make_contact_sheets.py` renders visual QA sheets from imported clips, and from raw staged videos when available, so the next Sem-Lex run can inspect whether center-cropping removes hands/signing space
 - `ml/scripts/build_manifest.py` now chooses signer-disjoint test signers by greedy Wave 1 sign coverage instead of sorted signer ID, reducing accidental zero-test-support signs
@@ -185,4 +188,4 @@ After training:
 
 ## Current blocker summary
 
-The current bundled model is `wave1-semlex-aslcitizen-wlasl-v27-v23recipe`. It is a hand-landmark TCN trained from scratch on Sem-Lex plus ASL Citizen/WLASL supplements, with signer-disjoint clip-level test accuracy 81.84%, macro F1 0.745, and weighted F1 0.819. The next meaningful model work is targeted improvement for `five`, `four`, and `who`, not another broad RGB-only training pass.
+The current bundled model is still `wave1-semlex-aslcitizen-wlasl-v27-v23recipe`. It is a hand-landmark TCN trained from scratch on Sem-Lex plus ASL Citizen/WLASL supplements, with signer-disjoint clip-level test accuracy 81.84%, macro F1 0.745, and weighted F1 0.819. The next meaningful model work is targeted improvement for `five`, `four`, and `who`, plus guarding `deaf`, not another broad RGB-only training pass or broad unweighted PopSign mix.

@@ -148,10 +148,10 @@ on:
         description: "Optional release tag to compare against before promotion"
         type: string
         default: ""
-      run_overfit_probe:
-        description: "Before full training, verify the model can memorize a tiny subset"
-        type: boolean
-        default: true
+      source_weights:
+        description: "Hand-landmark sampler source multipliers, e.g. popsign=0.35,wlasl=0.7"
+        type: string
+        default: ""
 
 jobs:
   train:
@@ -361,7 +361,7 @@ jobs:
           retention-days: 30
 
       - name: Tiny memorization probe
-        if: inputs.run_overfit_probe && (inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both') && inputs.model_size != 'hand_landmark_tcn'
+        if: (inputs.dataset_source == 'semlex' || inputs.dataset_source == 'both') && inputs.model_size != 'hand_landmark_tcn'
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -421,6 +421,7 @@ jobs:
             --min-feature-coverage ${{ inputs.min_feature_coverage }} \
             --landmark-noise-std ${{ inputs.landmark_noise_std }} \
             --landmark-dropout-prob ${{ inputs.landmark_dropout_prob }} \
+            --source-weights "${{ inputs.source_weights }}" \
             --early-stop-patience ${{ inputs.early_stop_patience }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
@@ -532,6 +533,7 @@ jobs:
             Label smoothing: `${{ inputs.label_smoothing }}`.
             Max grad norm: `${{ inputs.max_grad_norm }}`.
             Landmark noise/dropout: `${{ inputs.landmark_noise_std }}` / `${{ inputs.landmark_dropout_prob }}`.
+            Source weights: `${{ inputs.source_weights }}`.
 
             ## Files
             - `model.onnx` — drop into `apps/web/public/models/`
