@@ -7,7 +7,7 @@ import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "
 import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, getLabels, ModelUnavailableError, summarizeProbabilities } from "../lib/inference";
-import { confusionHint, loadRecognitionCalibration, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
+import { confusionHint, loadRecognitionCalibration, reliabilityFor, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import { buildConfusionDrillSigns, buildLearningPriorities } from "../lib/learningPlan";
 import { personalizeThresholds } from "../lib/personalCalibration";
 import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
@@ -23,6 +23,8 @@ const MIN_HAND_TRACKING_RATIO = 0.35;
 const MULTI_WINDOW_CAPTURE_MS = 2400;
 const PRACTICE_MODE_KEY = "practice_mode";
 const PRACTICE_ORDER_KEY = "practice_order";
+const WATCHLIST_SELF_CHECK_HINT =
+  "This sign is on the model watchlist, so recognition asks for your self-check instead of auto-passing it.";
 
 function readPracticeMode(): PracticeMode {
   try {
@@ -118,6 +120,7 @@ export default function PracticePage() {
     return buildLearningPriorities(signs, calibration, feedbackSummary).map((p) => p.sign);
   }, [calibration, feedbackSummary, practiceOrder, signs]);
   const current = orderedSigns[index];
+  const currentReliability = current ? reliabilityFor(calibration?.thresholds?.[current.sign_id]) : "watch";
 
   useEffect(() => {
     const saved = sessionStorage.getItem("session_log");
@@ -387,12 +390,18 @@ export default function PracticePage() {
       setPredicted(predictedLabel);
       setTopPredictions(top);
 
+      const watchlistSelfCheck =
+        reliabilityFor(calibration?.thresholds?.[current.sign_id]) === "weak" &&
+        predictedLabel === current.sign_id &&
+        result.outcome !== "pass";
       const hintReason =
         result.outcome === "retry" ? "framing" : result.outcome === "fail" ? "fail" : "pass";
       if (result.outcome !== "pass") {
-        const targetedHint = confusionHint(calibration, current.sign_id, predictedLabel);
+        const targetedHint = watchlistSelfCheck ? null : confusionHint(calibration, current.sign_id, predictedLabel);
         if (targetedHint) {
           setHint(targetedHint);
+        } else if (watchlistSelfCheck) {
+          setHint(null);
         } else {
           const h = await fetchHint(current.sign_id, hintReason, userId);
           setHint(h.message);
@@ -718,6 +727,12 @@ export default function PracticePage() {
               <p style={{ color: "var(--muted)" }}>
                 Detected: {predicted} ({(confidence * 100).toFixed(0)}%)
               </p>
+            )}
+            {practiceMode === "recognition" && currentReliability === "weak" && predicted === current?.sign_id && (
+              <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
+                <strong>Model watchlist</strong>
+                <p>{WATCHLIST_SELF_CHECK_HINT}</p>
+              </div>
             )}
             {practiceMode === "recognition" && trackingRatio !== null && (
               <p style={{ color: "var(--muted)" }}>
