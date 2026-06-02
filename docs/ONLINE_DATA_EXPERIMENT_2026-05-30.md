@@ -78,6 +78,8 @@ Clean, repeatable sources found:
 
 The follow-up run `wave1-semlex-aslcitizen-wlasl-asllvd-v30-weak5` uses the v27 recipe with WLASL and ASLLVD enabled for `five,four,who,goodbye,deaf`.
 
+v30 should **not** replace v27. It improved macro F1 to 0.769 and improved `four` substantially, but accuracy dropped to 80.49%, weighted F1 dropped to 0.802, and `deaf` F1 regressed enough for the comparison script to block promotion.
+
 Most important remaining data gaps:
 
 1. `five`: needs more native/public signer diversity or more self-recorded variation. WLASL plus ASLLVD helps, but held-out support is still thin.

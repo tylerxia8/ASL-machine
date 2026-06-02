@@ -31,6 +31,7 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` | Landmark TCN, Sem-Lex + learner samples + ASL Citizen + WLASL, 55 epochs, `letterbox`, v23-style recipe | 81.84% test accuracy, macro F1 0.745, weighted F1 0.819. Current bundled app model. |
 | `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` | Same as v27 plus ASLLVD `five` clips | 80.47% test accuracy, macro F1 0.740, weighted F1 0.809. Do not promote; `please` regressed. |
 | `wave1-semlex-aslcitizen-wlasl-v29-bs16` | Same source family as v27, ASLLVD disabled, batch size 16 | 76.85% test accuracy, macro F1 0.713, weighted F1 0.767. Do not promote; `deaf` and `who` regressed. |
+| `wave1-semlex-aslcitizen-wlasl-asllvd-v30-weak5` | v27 recipe plus targeted WLASL/ASLLVD clips for `five,four,who,goodbye,deaf` | 80.49% test accuracy, macro F1 0.769, weighted F1 0.802. Do not promote; macro F1 improved but `deaf` regressed and accuracy/weighted F1 dropped. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
