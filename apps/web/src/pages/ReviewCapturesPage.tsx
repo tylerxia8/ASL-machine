@@ -25,6 +25,7 @@ export default function ReviewCapturesPage() {
   const [clips, setClips] = useState<ClipReview[]>([]);
   const [signs, setSigns] = useState<SignMeta[]>([]);
   const accepted = clips.filter((clip) => clip.accepted);
+  const knownSignIds = useMemo(() => new Set(signs.map((sign) => sign.sign_id)), [signs]);
   const grouped = useMemo(() => {
     const rows: Record<string, number> = {};
     accepted.forEach((clip) => {
@@ -32,6 +33,17 @@ export default function ReviewCapturesPage() {
     });
     return Object.entries(rows).sort((a, b) => a[0].localeCompare(b[0]));
   }, [accepted]);
+  const warnings = useMemo(() => {
+    const filenames = new Map<string, number>();
+    clips.forEach((clip) => filenames.set(clip.file.name, (filenames.get(clip.file.name) ?? 0) + 1));
+    return {
+      unknownSigns: clips.filter((clip) => !knownSignIds.has(clip.sign_id)).length,
+      unknownSigners: clips.filter((clip) => clip.signer_id === "unknown").length,
+      tinyFiles: clips.filter((clip) => clip.file.size < 5 * 1024).length,
+      duplicates: clips.filter((clip) => (filenames.get(clip.file.name) ?? 0) > 1).length,
+    };
+  }, [clips, knownSignIds]);
+  const warningCount = warnings.unknownSigns + warnings.unknownSigners + warnings.tinyFiles + warnings.duplicates;
 
   useEffect(() => {
     return () => clips.forEach((clip) => URL.revokeObjectURL(clip.url));
@@ -47,11 +59,12 @@ export default function ReviewCapturesPage() {
       .filter((file) => /\.(webm|mp4|mov|mkv|avi)$/i.test(file.name))
       .map((file) => {
         const inferred = inferClip(file);
+        const accepted = inferred.sign_id !== "unknown" && inferred.signer_id !== "unknown" && file.size >= 5 * 1024;
         return {
           id: `${file.name}-${file.lastModified}-${file.size}`,
           file,
           url: URL.createObjectURL(file),
-          accepted: true,
+          accepted,
           ...inferred,
         };
       });
@@ -115,6 +128,12 @@ export default function ReviewCapturesPage() {
                 {grouped.map(([sign, count]) => `${sign}: ${count}`).join(" · ")}
               </p>
             )}
+            {warningCount > 0 && (
+              <p className="status-retry" style={{ fontSize: "0.9rem" }}>
+                Review flags: {warnings.unknownSigns} unknown signs, {warnings.unknownSigners} unknown signers,{" "}
+                {warnings.tinyFiles} tiny files, {warnings.duplicates} duplicate names.
+              </p>
+            )}
             <button className="btn" onClick={exportManifest} disabled={accepted.length === 0}>
               Export clean manifest
             </button>
@@ -128,6 +147,11 @@ export default function ReviewCapturesPage() {
                   <code>{clip.sign_id}</code> · {clip.signer_id}
                 </p>
                 <p style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{clip.file.name}</p>
+                {(!knownSignIds.has(clip.sign_id) || clip.signer_id === "unknown" || clip.file.size < 5 * 1024) && (
+                  <p className="status-retry" style={{ fontSize: "0.8rem" }}>
+                    Check label, signer, or file size before accepting.
+                  </p>
+                )}
                 <label>
                   <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>Sign</span>
                   <select
