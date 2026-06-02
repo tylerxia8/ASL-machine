@@ -148,18 +148,10 @@ on:
         description: "Optional release tag to compare against before promotion"
         type: string
         default: ""
-      fail_on_regression:
-        description: "Fail workflow when model comparison recommends DO NOT PROMOTE"
-        type: boolean
-        default: false
       run_overfit_probe:
         description: "Before full training, verify the model can memorize a tiny subset"
         type: boolean
         default: true
-      probe_only:
-        description: "Stop after the manifest summary and memorization probe; do not train/export/release"
-        type: boolean
-        default: false
 
 jobs:
   train:
@@ -373,7 +365,7 @@ jobs:
             --pass-threshold 0.90
 
       - name: Extract MediaPipe hand landmarks
-        if: ${{ !inputs.probe_only && inputs.model_size == 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size == 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -382,7 +374,7 @@ jobs:
             --out-dir ml/data/hand_landmarks
 
       - name: Train
-        if: ${{ !inputs.probe_only && inputs.model_size != 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size != 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -400,7 +392,7 @@ jobs:
             --preprocess ${{ inputs.preprocess }}
 
       - name: Train hand-landmark model
-        if: ${{ !inputs.probe_only && inputs.model_size == 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size == 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -420,7 +412,7 @@ jobs:
             --early-stop-patience ${{ inputs.early_stop_patience }}
 
       - name: Evaluate (populates VALIDATION_REPORT auto-metrics block)
-        if: ${{ !inputs.probe_only && inputs.model_size != 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size != 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -429,7 +421,7 @@ jobs:
             --manifest ml/data/manifest.json
 
       - name: Evaluate hand-landmark model
-        if: ${{ !inputs.probe_only && inputs.model_size == 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size == 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -439,19 +431,17 @@ jobs:
             --feature-dir ml/data/hand_landmarks
 
       - name: Build recognition calibration
-        if: ${{ !inputs.probe_only }}
         env:
           PYTHONIOENCODING: utf-8
         run: python ml/scripts/build_recognition_calibration.py
 
       - name: Build targeted capture plan
-        if: ${{ !inputs.probe_only }}
         env:
           PYTHONIOENCODING: utf-8
         run: python ml/scripts/build_capture_plan.py --out ml/exports/capture_plan.md
 
       - name: Compare against baseline model
-        if: ${{ !inputs.probe_only && inputs.baseline_model_tag != '' }}
+        if: ${{ inputs.baseline_model_tag != '' }}
         env:
           GH_TOKEN: ${{ github.token }}
           PYTHONIOENCODING: utf-8
@@ -461,18 +451,13 @@ jobs:
             --pattern eval_metrics.json \
             --dir ml/exports/baseline \
             --clobber
-          extra_args=""
-          if [ "${{ inputs.fail_on_regression }}" = "true" ]; then
-            extra_args="--fail-on-no-promote"
-          fi
           python ml/scripts/compare_models.py \
             --base ml/exports/baseline/eval_metrics.json \
             --candidate ml/exports/eval_metrics.json \
-            --out ml/exports/model_comparison.md \
-            $extra_args
+            --out ml/exports/model_comparison.md
 
       - name: Ensure comparison placeholder
-        if: ${{ !inputs.probe_only && inputs.baseline_model_tag == '' }}
+        if: ${{ inputs.baseline_model_tag == '' }}
         run: |
           cat > ml/exports/model_comparison.md <<'EOF'
           # Model Comparison
@@ -481,7 +466,7 @@ jobs:
           EOF
 
       - name: Export ONNX
-        if: ${{ !inputs.probe_only && inputs.model_size != 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size != 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -490,7 +475,7 @@ jobs:
           ls -lh ml/exports/
 
       - name: Export hand-landmark ONNX
-        if: ${{ !inputs.probe_only && inputs.model_size == 'hand_landmark_tcn' }}
+        if: ${{ inputs.model_size == 'hand_landmark_tcn' }}
         env:
           PYTHONIOENCODING: utf-8
         run: |
@@ -499,7 +484,6 @@ jobs:
           ls -lh ml/exports/
 
       - name: Upload artifacts (always)
-        if: ${{ !inputs.probe_only }}
         uses: actions/upload-artifact@v4
         with:
           name: model-${{ inputs.model_version }}
@@ -517,7 +501,6 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: ${{ !inputs.probe_only }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.model_version }}
