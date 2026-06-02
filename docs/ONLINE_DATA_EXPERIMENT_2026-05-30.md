@@ -63,6 +63,8 @@ Results:
 
 Do not promote this local v25 experiment to the app. The follow-up GitHub Actions run `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` used the same source pipeline with the stronger v23-style training recipe and should replace v23: accuracy 81.84%, macro F1 0.745, weighted F1 0.819, with the comparison script recommending PROMOTE.
 
+The later ASLLVD-backed `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` run should **not** replace v27. It added usable ASLLVD `five` clips, but accuracy dropped to 80.47%, macro F1 dropped to 0.740, weighted F1 dropped to 0.809, and `please` F1 regressed enough for the comparison script to block promotion.
+
 Most important remaining data gaps:
 
 1. `five`: needs more native/public signer diversity or more self-recorded variation. WLASL plus ASLLVD helps, but held-out support is still thin.

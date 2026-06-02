@@ -29,4 +29,11 @@ describe("personalizeThresholds", () => {
     const next = personalizeThresholds({ passThreshold: 0.8, retryThreshold: 0.6 }, "how", summary(1, 2));
     expect(next.adjustment).toBe(0);
   });
+
+  it("does not adjust non-autopass weak-sign thresholds", () => {
+    const next = personalizeThresholds({ passThreshold: 1.01, retryThreshold: 0.82 }, "how", summary(3, 4));
+    expect(next.passThreshold).toBe(1.01);
+    expect(next.retryThreshold).toBe(0.82);
+    expect(next.adjustment).toBe(0);
+  });
 });

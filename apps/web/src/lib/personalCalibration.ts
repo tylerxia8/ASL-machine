@@ -12,6 +12,7 @@ export function personalizeThresholds(
 ): PersonalThresholds {
   const row = feedback.bySign[signId];
   if (!row || row.total < 3) return { ...base, adjustment: 0 };
+  if (base.passThreshold > 1) return { ...base, adjustment: 0 };
 
   const missRate = row.rejected / row.total;
   const adjustment = missRate >= 0.5 ? 0.06 : missRate <= 0.15 ? -0.03 : 0;
