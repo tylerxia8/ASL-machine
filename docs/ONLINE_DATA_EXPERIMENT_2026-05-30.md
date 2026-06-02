@@ -67,6 +67,17 @@ The later ASLLVD-backed `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` run shou
 
 The WLASL-only batch-size follow-up `wave1-semlex-aslcitizen-wlasl-v29-bs16` should also **not** replace v27. It removed ASLLVD and lowered landmark batch size to 16, but accuracy dropped to 76.85%, macro F1 dropped to 0.713, weighted F1 dropped to 0.767, and `deaf` / `who` F1 regressions blocked promotion.
 
+## Weak-sign online source sweep - 2026-06-02
+
+Target signs: `five`, `four`, `who`, `goodbye`, `deaf`.
+
+Clean, repeatable sources found:
+
+- WLASL direct-video entries: 23 clips total (`five`: 3, `four`: 3, `who`: 9, `goodbye`: 1, `deaf`: 7). YouTube entries, HTML responses, and 403-protected dictionary media were skipped.
+- ASLLVD exact-gloss citation-form rows: 19 clips total (`five`: 4, `four`: 6, `who`: 2, `deaf`: 7). `goodbye` has 0 exact ASLLVD rows.
+
+The follow-up run `wave1-semlex-aslcitizen-wlasl-asllvd-v30-weak5` uses the v27 recipe with WLASL and ASLLVD enabled for `five,four,who,goodbye,deaf`.
+
 Most important remaining data gaps:
 
 1. `five`: needs more native/public signer diversity or more self-recorded variation. WLASL plus ASLLVD helps, but held-out support is still thin.
