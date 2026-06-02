@@ -9,6 +9,7 @@ import {
   listReleaseSources,
   setSelectedSourceId,
 } from "../lib/modelSource";
+import { loadRecognitionCalibration, reliabilityFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
 
 type ModelMeta = {
   model_version?: string;
@@ -24,6 +25,7 @@ export default function LobbyPage() {
   const [apiUrl, setApiUrl] = useState("");
   const [modelInfo, setModelInfo] = useState("");
   const [modelWarning, setModelWarning] = useState("");
+  const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
   const [sources, setSources] = useState<ModelSource[]>([BUNDLED_SOURCE]);
   const [selectedSourceId, setSelectedSourceIdState] = useState(getSelectedSourceId());
 
@@ -34,6 +36,7 @@ export default function LobbyPage() {
     });
     fetchProgress(userId, auth.session?.access_token).then(setProgress).catch(() => setProgress(null));
     listReleaseSources().then((rs) => setSources([BUNDLED_SOURCE, ...rs]));
+    loadRecognitionCalibration().then(setCalibration).catch(() => setCalibration(null));
   }, [userId, auth.session]);
 
   useEffect(() => {
@@ -79,6 +82,26 @@ export default function LobbyPage() {
     window.location.href = "/practice";
   };
 
+  const thresholdRows = Object.entries(calibration?.thresholds ?? {}).map(([signId, row]) => ({
+    signId,
+    row,
+    reliability: reliabilityFor(row),
+  }));
+  const modelHealth = {
+    strong: thresholdRows.filter((r) => r.reliability === "strong").length,
+    watch: thresholdRows.filter((r) => r.reliability === "watch").length,
+    weak: thresholdRows.filter((r) => r.reliability === "weak").length,
+  };
+  const weakestSigns = thresholdRows
+    .filter((r) => r.reliability !== "strong")
+    .sort(
+      (a, b) =>
+        (a.row.f1 ?? 1) - (b.row.f1 ?? 1) ||
+        (a.row.support ?? 999) - (b.row.support ?? 999) ||
+        a.signId.localeCompare(b.signId)
+    )
+    .slice(0, 4);
+
   return (
     <div className="container">
       <h1>Practice Lobby</h1>
@@ -113,6 +136,32 @@ export default function LobbyPage() {
           </select>
           <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>(page will reload on change)</span>
         </div>
+        {thresholdRows.length > 0 && (
+          <div className="metric-grid" style={{ margin: "0.75rem 0 0" }}>
+            <div>
+              <span className="metric-label">Strong signs</span>
+              <strong>{modelHealth.strong}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Watch signs</span>
+              <strong className={modelHealth.watch > 0 ? "status-retry" : undefined}>{modelHealth.watch}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Weak signs</span>
+              <strong className={modelHealth.weak > 0 ? "status-fail" : undefined}>{modelHealth.weak}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Lowest F1</span>
+              <strong>{weakestSigns[0]?.signId ?? "none"}</strong>
+            </div>
+          </div>
+        )}
+        {weakestSigns.length > 0 && (
+          <p style={{ color: "var(--muted)", margin: "0.75rem 0 0", fontSize: "0.85rem" }}>
+            Watchlist:{" "}
+            {weakestSigns.map((r) => `${r.signId} ${Math.round((r.row.f1 ?? 0) * 100)}%`).join(", ")}
+          </p>
+        )}
       </div>
       <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--accent)" }}>
         <strong>Wave 1 track</strong>
