@@ -67,6 +67,10 @@ export default function CapturePage() {
     }
     return buildLearningPriorities(signs, calibration, feedbackSummary, counts).map((p) => p.sign);
   }, [calibration, captureOrder, counts, feedbackSummary.bySign, signs]);
+  const capturePriorities = useMemo(
+    () => buildLearningPriorities(signs, calibration, feedbackSummary, counts).slice(0, 6),
+    [calibration, counts, feedbackSummary, signs]
+  );
 
   const current = orderedSigns[index];
 
@@ -218,6 +222,9 @@ export default function CapturePage() {
   const busy = recording || countingDown || phase === "saving";
   const currentThreshold = current ? calibration?.thresholds?.[current.sign_id] : null;
   const currentFeedback = current ? feedbackSummary.bySign[current.sign_id] : null;
+  const currentPriority = current
+    ? capturePriorities.find((p) => p.sign.sign_id === current.sign_id)
+    : null;
 
   if (signs.length === 0) {
     return (
@@ -291,6 +298,32 @@ export default function CapturePage() {
         </span>
       </div>
 
+      {captureOrder === "weak_first" && capturePriorities.length > 0 && (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <strong>Next capture targets</strong>
+          <table className="compact-table">
+            <thead>
+              <tr>
+                <th>Sign</th>
+                <th>Clips</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {capturePriorities.map((priority) => (
+                <tr key={priority.sign.sign_id}>
+                  <td>
+                    {priority.sign.gloss} <span style={{ color: "var(--muted)" }}>({priority.sign.sign_id})</span>
+                  </td>
+                  <td>{counts[priority.sign.sign_id] ?? 0}/{TARGET_PER_SIGN}</td>
+                  <td>{priority.reasons.join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {cameraError ? (
         <div className="card status-fail">
           <p>{cameraError}</p>
@@ -358,6 +391,11 @@ export default function CapturePage() {
         <p style={{ marginTop: "0.25rem" }}>
           Clips this sign: <strong>{counts[current.sign_id] ?? 0}</strong> / {TARGET_PER_SIGN}
         </p>
+        {currentPriority && (
+          <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
+            Capture priority: {currentPriority.reasons.join(", ")}.
+          </p>
+        )}
         {(currentThreshold || currentFeedback) && (
           <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginTop: "0.25rem" }}>
             {currentThreshold && (
