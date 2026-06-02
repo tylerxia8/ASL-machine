@@ -32,6 +32,8 @@ ml/data/incoming/
 ml/data/incoming_online_aslcitizen/
 ml/data/incoming_online_wlasl/
 ml/data/incoming_online_asllvd/
+ml/data/incoming_online_wlasl_weak/
+ml/data/incoming_online_asllvd_weak/
 ml/data/external_indexes/
 ml/data/semlex/
 ml/checkpoints/
