@@ -34,6 +34,7 @@ ml/data/incoming_online_wlasl/
 ml/data/incoming_online_asllvd/
 ml/data/incoming_online_wlasl_weak/
 ml/data/incoming_online_asllvd_weak/
+ml/data/incoming_online_popsign*/
 ml/data/external_indexes/
 ml/data/semlex/
 ml/checkpoints/
