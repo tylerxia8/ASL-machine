@@ -4,7 +4,7 @@ import { useAuth, getUserId } from "../lib/auth";
 import { fetchMastery, fetchProgress, fetchSigns, Mastery, ProgressSummary, type SignMeta } from "../lib/api";
 import { buildLearningPriorities, type LearningPriority } from "../lib/learningPlan";
 import { readPhraseLog, summarizePhraseLog } from "../lib/phraseLog";
-import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
+import { loadRecognitionCalibration, reliabilityFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import {
   clearRecognitionFeedback,
   downloadText,
@@ -78,6 +78,19 @@ export default function ProgressPage() {
   const feedbackSummary = summarizeRecognitionFeedback(recognitionFeedback);
   const phraseSummary = summarizePhraseLog(phraseLog);
   const learningPriorities: LearningPriority[] = buildLearningPriorities(signs, calibration, feedbackSummary).slice(0, 8);
+  const weakSigns = signs
+    .map((sign) => {
+      const threshold = calibration?.thresholds?.[sign.sign_id];
+      return { sign, threshold, reliability: reliabilityFor(threshold) };
+    })
+    .filter((row) => row.reliability !== "strong")
+    .sort(
+      (a, b) =>
+        (a.threshold?.f1 ?? 1) - (b.threshold?.f1 ?? 1) ||
+        (a.threshold?.support ?? 999) - (b.threshold?.support ?? 999) ||
+        a.sign.gloss.localeCompare(b.sign.gloss)
+    )
+    .slice(0, 8);
   const confusionRows = Object.entries(calibration?.confusions ?? {})
     .map(([pair, row]) => ({ pair, ...row }))
     .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
@@ -314,15 +327,62 @@ export default function ProgressPage() {
 
       <h2>Model diagnostics</h2>
       <div className="card">
-        <p style={{ marginTop: 0 }}>
-          Model: <code>{calibration?.model_version ?? "unknown"}</code>
-          {typeof calibration?.accuracy === "number" && (
-            <span style={{ color: "var(--muted)" }}> - eval accuracy {(calibration.accuracy * 100).toFixed(1)}%</span>
-          )}
-        </p>
+        <div className="metric-grid">
+          <div>
+            <span className="metric-label">Model</span>
+            <strong><code>{calibration?.model_version ?? "unknown"}</code></strong>
+          </div>
+          <div>
+            <span className="metric-label">Eval accuracy</span>
+            <strong>{typeof calibration?.accuracy === "number" ? `${(calibration.accuracy * 100).toFixed(1)}%` : "n/a"}</strong>
+          </div>
+          <div>
+            <span className="metric-label">Weak signs</span>
+            <strong>{weakSigns.filter((row) => row.reliability === "weak").length}</strong>
+          </div>
+        </div>
+        {weakSigns.length > 0 && (
+          <>
+            <strong>Model health watchlist</strong>
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th>Sign</th>
+                  <th>Status</th>
+                  <th>F1</th>
+                  <th>Support</th>
+                  <th>Pass threshold</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weakSigns.map((row) => (
+                  <tr key={row.sign.sign_id}>
+                    <td>
+                      <code>{row.sign.sign_id}</code>
+                    </td>
+                    <td>
+                      <span className={`status-${row.reliability === "weak" ? "fail" : "retry"}`}>
+                        {row.reliability}
+                      </span>
+                    </td>
+                    <td>{typeof row.threshold?.f1 === "number" ? `${Math.round(row.threshold.f1 * 100)}%` : "n/a"}</td>
+                    <td>{row.threshold?.support ?? "n/a"}</td>
+                    <td>
+                      {row.reliability === "weak"
+                        ? "self-check"
+                        : typeof row.threshold?.passThreshold === "number"
+                          ? `${Math.round(row.threshold.passThreshold * 100)}%`
+                          : "default"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
         {learningPriorities.length > 0 && (
           <>
-            <strong>Next signs to improve</strong>
+            <strong style={{ display: "block", marginTop: "1rem" }}>Next signs to improve</strong>
             <table className="compact-table">
               <thead>
                 <tr>

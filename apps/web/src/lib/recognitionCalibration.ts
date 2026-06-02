@@ -14,6 +14,8 @@ export type RecognitionCalibration = {
   confusions?: Record<string, { count?: number; message: string }>;
 };
 
+export type SignReliability = "strong" | "watch" | "weak";
+
 let calibrationPromise: Promise<RecognitionCalibration> | null = null;
 
 export function resetRecognitionCalibration() {
@@ -38,7 +40,12 @@ export function thresholdsFor(
   calibration: RecognitionCalibration | null,
   signId: string
 ): Required<Pick<SignThresholds, "passThreshold" | "retryThreshold">> {
-  return calibration?.thresholds?.[signId] ?? { passThreshold: 0.9, retryThreshold: 0.7 };
+  const row = calibration?.thresholds?.[signId];
+  const base = row ?? { passThreshold: 0.9, retryThreshold: 0.7 };
+  if (reliabilityFor(row) === "weak") {
+    return { passThreshold: 1.01, retryThreshold: Math.min(base.retryThreshold, 0.82) };
+  }
+  return { passThreshold: base.passThreshold, retryThreshold: base.retryThreshold };
 }
 
 export function confusionHint(
@@ -47,4 +54,13 @@ export function confusionHint(
   predictedLabel: string
 ) {
   return calibration?.confusions?.[`${promptLabel}->${predictedLabel}`]?.message ?? null;
+}
+
+export function reliabilityFor(row: SignThresholds | undefined): SignReliability {
+  if (!row) return "watch";
+  const f1 = row.f1 ?? 1;
+  const support = row.support ?? 999;
+  if (f1 < 0.5 || support < 10) return "weak";
+  if (f1 < 0.75 || support < 25) return "watch";
+  return "strong";
 }

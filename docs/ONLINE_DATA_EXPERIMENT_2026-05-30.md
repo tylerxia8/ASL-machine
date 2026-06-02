@@ -8,6 +8,7 @@ Secondary sources considered:
 
 - Sem-Lex remains the preferred native-signer source for the promoted model.
 - WLASL contains a small public-index `five` set. The project fetcher downloads direct MP4 URLs only and skips YouTube entries unless a future pass adds a dedicated clipping workflow.
+- ASLLVD contains exact-gloss `FIVE` citation-form rows from four signers. The project fetcher trims the official scene videos locally from annotated frame ranges and keeps all raw/trimmed files out of git.
 
 ## Import Result
 
@@ -16,8 +17,10 @@ Command:
 ```bash
 python ml/scripts/fetch_asl_citizen.py --clips-per-sign 20 --out-dir ml/data/incoming_online_aslcitizen
 python ml/scripts/fetch_wlasl.py --signs five --clips-per-sign 20 --out-dir ml/data/incoming_online_wlasl
+python ml/scripts/fetch_asllvd.py --signs five --clips-per-sign 20 --out-dir ml/data/incoming_online_asllvd
 python ml/scripts/import_captures.py --in-dir ml/data/incoming_online_aslcitizen --resize-mode letterbox
 python ml/scripts/import_captures.py --in-dir ml/data/incoming_online_wlasl --resize-mode letterbox
+python ml/scripts/import_captures.py --in-dir ml/data/incoming_online_asllvd --resize-mode letterbox
 python ml/scripts/build_manifest.py --wave1 --signer-disjoint
 python ml/scripts/extract_hand_landmarks.py --manifest ml/data/manifest.json --out-dir ml/data/hand_landmarks
 ```
@@ -26,11 +29,12 @@ Results:
 
 - ASL Citizen downloaded/imported: 480 clips after adding the `EAT1` / `EAT2` gloss mapping.
 - WLASL direct MP4 supplement: 3 `five` clips. The ASL SignBank URL failed TLS hostname validation, Handspeak/SigningSavvy returned 403, and the YouTube entry was skipped by default.
-- Combined local dataset after adding learner recordings: 552 clips, 25 signs, 41 signers.
-- Signer-disjoint split: 360 train, 55 val, 137 test.
+- ASLLVD exact-gloss supplement: 4 trimmed `five` clips from Liz, Naomi, Brady, and Tyler.
+- Combined local dataset after adding learner recordings and ASLLVD: 556 clips, 25 signs, 45 signers.
+- Local signer-disjoint split after ASLLVD import: 343 train, 51 val, 162 test.
 - Hand landmark coverage: 6481/13248 frames, 48.9%.
 - Missing from ASL Citizen Wave 1 fetch after the gloss-map fix: `five`.
-- `five` now has a small WLASL supplement, but held-out support is still thin: 17 train, 3 val, 1 test.
+- `five` now has WLASL plus ASLLVD supplements, but held-out support is still thin in the local split: 21 train, 3 val, 1 test.
 
 ## Experimental Training
 
@@ -61,6 +65,6 @@ Do not promote this local v25 experiment to the app. The follow-up GitHub Action
 
 Most important remaining data gaps:
 
-1. `five`: needs more native/public signer diversity or more self-recorded variation. The current WLASL direct-MP4 supplement is useful but too small.
+1. `five`: needs more native/public signer diversity or more self-recorded variation. WLASL plus ASLLVD helps, but held-out support is still thin.
 2. `eat`: use the ASL Citizen `EAT1` / `EAT2` mapping plus Sem-Lex in the next full training run.
 3. `how`, `who`, `deaf`, `friend`: keep as watchlist signs because they still showed weaker held-out recall than the easier classes.
