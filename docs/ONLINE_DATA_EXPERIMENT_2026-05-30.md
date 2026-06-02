@@ -65,6 +65,8 @@ Do not promote this local v25 experiment to the app. The follow-up GitHub Action
 
 The later ASLLVD-backed `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` run should **not** replace v27. It added usable ASLLVD `five` clips, but accuracy dropped to 80.47%, macro F1 dropped to 0.740, weighted F1 dropped to 0.809, and `please` F1 regressed enough for the comparison script to block promotion.
 
+The WLASL-only batch-size follow-up `wave1-semlex-aslcitizen-wlasl-v29-bs16` should also **not** replace v27. It removed ASLLVD and lowered landmark batch size to 16, but accuracy dropped to 76.85%, macro F1 dropped to 0.713, weighted F1 dropped to 0.767, and `deaf` / `who` F1 regressions blocked promotion.
+
 Most important remaining data gaps:
 
 1. `five`: needs more native/public signer diversity or more self-recorded variation. WLASL plus ASLLVD helps, but held-out support is still thin.

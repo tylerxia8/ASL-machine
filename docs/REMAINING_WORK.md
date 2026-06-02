@@ -28,6 +28,9 @@ Sem-Lex access is working: the v9 and v10 runs fetched, decoded, trained, evalua
 | `wave1-semlex-full-v15-tcn-letterbox` | Same as v14, but `preprocess=letterbox` instead of center crop | 6.07% test accuracy, macro F1 0.02845. Letterbox preserved more horizontal signing space and passed the memorization probe, but did not beat v8 or v14 macro F1; do not replace bundled model. |
 | `wave1-semlex-full-v16-motion-tcn` | Same as v15, but `model_size=motion_tcn`, a dual RGB + frame-difference temporal model | 5.51% test accuracy, macro F1 0.02574, weighted F1 0.03499. Predictions spread better during validation but still concentrated on `who` and `sorry` on test; do not replace bundled model. |
 | `wave1-semlex-full-v17-motion-tcn-fixed15` | Same as v16, but fixed 15 epochs with early stopping disabled | 5.70% test accuracy, macro F1 0.04030, weighted F1 0.04773. Best macro F1 so far and better prediction diversity, but still far below v8 accuracy; do not replace bundled model. |
+| `wave1-semlex-aslcitizen-wlasl-v27-v23recipe` | Landmark TCN, Sem-Lex + learner samples + ASL Citizen + WLASL, 55 epochs, `letterbox`, v23-style recipe | 81.84% test accuracy, macro F1 0.745, weighted F1 0.819. Current bundled app model. |
+| `wave1-semlex-aslcitizen-wlasl-asllvd-v28-five` | Same as v27 plus ASLLVD `five` clips | 80.47% test accuracy, macro F1 0.740, weighted F1 0.809. Do not promote; `please` regressed. |
+| `wave1-semlex-aslcitizen-wlasl-v29-bs16` | Same source family as v27, ASLLVD disabled, batch size 16 | 76.85% test accuracy, macro F1 0.713, weighted F1 0.767. Do not promote; `deaf` and `who` regressed. |
 
 GitHub CLI is authenticated on this machine as of 2026-05-26, and the `SEMLEX_DATA_URLS` / `SEMLEX_DRIVE_FILES` secrets exist.
 
