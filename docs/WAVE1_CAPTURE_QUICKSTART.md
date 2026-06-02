@@ -30,6 +30,10 @@ cd "c:\Users\tyler\Downloads\Gauntlet Superbuilders ASL"
 
 The plan is written to `docs\CAPTURE_PLAN.md`. It combines `eval_metrics.json` with learner clips already in `ml\data\learner_samples\` and `ml\data\incoming\`, then lists the signs that need more examples first.
 
+## Review downloaded clips
+
+Open `/review-captures`, select the videos from Downloads, and reject bad takes before import. The review page flags unknown signs, unknown signer IDs, duplicate filenames, and tiny files that are likely empty or interrupted recordings. Export the clean manifest for your notes, then move only accepted videos into the project.
+
 ## Move files into the project
 
 **Option A — PowerShell (easiest)**
