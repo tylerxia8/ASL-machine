@@ -7,6 +7,7 @@ function summary(rejected: number, total: number): RecognitionFeedbackSummary {
     total,
     accepted: total - rejected,
     rejected,
+    routed: { total: 0, accepted: 0, rejected: 0, byRoute: {} },
     bySign: {
       how: {
         total,

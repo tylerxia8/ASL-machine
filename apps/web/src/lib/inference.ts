@@ -44,6 +44,9 @@ export type InferenceSummary = {
   topPredictions: { label: string; confidence: number }[];
   probs: number[];
   modelVersion?: string;
+  routedBy?: string;
+  primaryPrediction?: InferenceSummary;
+  specialistPrediction?: InferenceSummary;
 };
 
 export function getLabels() {
