@@ -8,6 +8,8 @@ export type RecognitionFeedbackEntry = {
   accepted?: boolean;
   correct?: boolean;
   top_predictions?: { label: string; confidence: number }[];
+  window_predictions?: { label: string; confidence: number }[];
+  agreement?: number;
   tracking_ratio?: number | null;
   model_version?: string;
   routed_by?: string;
@@ -112,6 +114,8 @@ export function recognitionFeedbackCsv(entries: RecognitionFeedbackEntry[]) {
     "sign_id",
     "predicted_label",
     "confidence",
+    "agreement",
+    "window_predictions",
     "accepted",
     "routed_by",
     "primary_predicted_label",
@@ -124,6 +128,8 @@ export function recognitionFeedbackCsv(entries: RecognitionFeedbackEntry[]) {
     feedbackSignId(entry),
     feedbackPredictedLabel(entry),
     typeof entry.confidence === "number" ? entry.confidence.toFixed(6) : "",
+    typeof entry.agreement === "number" ? entry.agreement.toFixed(6) : "",
+    entry.window_predictions?.map((p) => `${p.label}:${p.confidence.toFixed(4)}`).join(";") ?? "",
     feedbackAccepted(entry) ? "true" : "false",
     entry.routed_by ?? "",
     entry.primary_predicted_label ?? "",

@@ -43,6 +43,8 @@ export type InferenceSummary = {
   margin: number;
   topPredictions: { label: string; confidence: number }[];
   probs: number[];
+  windowPredictions?: { label: string; confidence: number }[];
+  agreement?: number;
   modelVersion?: string;
   routedBy?: string;
   primaryPrediction?: InferenceSummary;
@@ -120,7 +122,7 @@ export async function runInferenceBatch(tensorDataRows: Float32Array[]) {
     labels,
     tensorDataRows,
   });
-  const primary = summarizeProbabilitiesForLabels(primaryProbs, labels);
+  const primary = summarizeProbabilitiesForLabels(primaryProbs.average, labels, primaryProbs.rows);
   const specialist = await maybeRunSpecialist({ ort, tensorDataRows, primary });
   return specialist ?? primary;
 }
@@ -132,7 +134,11 @@ export function summarizeProbabilities(probs: number[]) {
   return summarizeProbabilitiesForLabels(probs, labels);
 }
 
-export function summarizeProbabilitiesForLabels(probs: number[], sourceLabels: LabelsFile): InferenceSummary {
+export function summarizeProbabilitiesForLabels(
+  probs: number[],
+  sourceLabels: LabelsFile,
+  windowRows: number[][] = []
+): InferenceSummary {
   let bestIdx = 0;
   let best = probs[0];
   for (let i = 1; i < probs.length; i++) {
@@ -146,14 +152,32 @@ export function summarizeProbabilitiesForLabels(probs: number[], sourceLabels: L
     .sort((a, b) => b.confidence - a.confidence)
     .slice(0, 3);
   const margin = topPredictions[0].confidence - (topPredictions[1]?.confidence ?? 0);
+  const windowPredictions = windowRows.map((row) => summarizeWindowPrediction(row, sourceLabels));
+  const agreement = windowPredictions.length > 0
+    ? windowPredictions.filter((row) => row.label === sourceLabels.sign_ids[bestIdx]).length / windowPredictions.length
+    : undefined;
   return {
     predictedLabel: sourceLabels.sign_ids[bestIdx],
     confidence: best,
     margin,
     topPredictions,
     probs,
+    windowPredictions: windowPredictions.length > 0 ? windowPredictions : undefined,
+    agreement,
     modelVersion: sourceLabels.model_version,
   };
+}
+
+function summarizeWindowPrediction(probs: number[], sourceLabels: LabelsFile) {
+  let bestIdx = 0;
+  let best = probs[0];
+  for (let i = 1; i < probs.length; i++) {
+    if (probs[i] > best) {
+      best = probs[i];
+      bestIdx = i;
+    }
+  }
+  return { label: sourceLabels.sign_ids[bestIdx], confidence: best };
 }
 
 async function loadEnsembleConfig() {
@@ -219,7 +243,7 @@ async function maybeRunSpecialist({
     labels: runtime.labels,
     tensorDataRows,
   });
-  const specialist = summarizeProbabilitiesForLabels(specialistProbs, runtime.labels);
+  const specialist = summarizeProbabilitiesForLabels(specialistProbs.average, runtime.labels, specialistProbs.rows);
   return routeSpecialistPrediction(primary, specialist, route);
 }
 
@@ -254,7 +278,7 @@ async function runRuntimeBatch({
       return softmax(Array.from(logits));
     })
   );
-  return averageProbabilities(rows);
+  return { average: averageProbabilities(rows), rows };
 }
 
 function averageProbabilities(rows: number[][]) {

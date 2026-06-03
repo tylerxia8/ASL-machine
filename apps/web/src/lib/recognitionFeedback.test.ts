@@ -16,10 +16,18 @@ describe("recognition feedback", () => {
 
   it("exports normalized csv rows", () => {
     const csv = recognitionFeedbackCsv([
-      { ts: 0, sign_id: "how", predicted_label: "who", confidence: 0.42, correct: false },
+      {
+        ts: 0,
+        sign_id: "how",
+        predicted_label: "who",
+        confidence: 0.42,
+        agreement: 0.67,
+        window_predictions: [{ label: "who", confidence: 0.8 }],
+        correct: false,
+      },
     ]);
 
-    expect(csv).toContain('"how","who","0.420000","false"');
+    expect(csv).toContain('"how","who","0.420000","0.670000","who:0.8000","false"');
   });
 
   it("summarizes routed specialist feedback", () => {

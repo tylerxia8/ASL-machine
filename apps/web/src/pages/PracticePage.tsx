@@ -21,6 +21,7 @@ type SignReference = { handshape: string; movement: string; location: string };
 const RECORD_MS = 2000;
 const MIN_HAND_TRACKING_RATIO = 0.35;
 const MULTI_WINDOW_CAPTURE_MS = 2400;
+const MIN_WINDOW_AGREEMENT_FOR_PASS = 0.67;
 const PRACTICE_MODE_KEY = "practice_mode";
 const PRACTICE_ORDER_KEY = "practice_order";
 const WATCHLIST_SELF_CHECK_HINT =
@@ -91,6 +92,8 @@ export default function PracticePage() {
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
   const [topPredictions, setTopPredictions] = useState<{ label: string; confidence: number }[]>([]);
+  const [windowPredictions, setWindowPredictions] = useState<{ label: string; confidence: number }[]>([]);
+  const [windowAgreement, setWindowAgreement] = useState<number | null>(null);
   const [routeInfo, setRouteInfo] = useState<{
     routedBy: string;
     primaryLabel: string;
@@ -154,6 +157,15 @@ export default function PracticePage() {
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+  };
+
+  const resetRecognitionDetails = () => {
+    setTopPredictions([]);
+    setWindowPredictions([]);
+    setWindowAgreement(null);
+    setRouteInfo(null);
+    setTrackingRatio(null);
+    setRecognitionFeedbackSaved(false);
   };
 
   const startCamera = useCallback(async () => {
@@ -252,10 +264,7 @@ export default function PracticePage() {
     setOutcome(null);
     setHint(null);
     setPredicted("");
-    setTopPredictions([]);
-    setRouteInfo(null);
-    setTrackingRatio(null);
-    setRecognitionFeedbackSaved(false);
+    resetRecognitionDetails();
     setConfidence(0);
   };
 
@@ -270,7 +279,7 @@ export default function PracticePage() {
     setPhase("prompt");
     setOutcome(null);
     setHint(null);
-    setRouteInfo(null);
+    resetRecognitionDetails();
   };
 
   const startSelfCheck = () => {
@@ -279,10 +288,7 @@ export default function PracticePage() {
       setOutcome(null);
       setConfidence(0);
       setPredicted("");
-      setTopPredictions([]);
-      setTrackingRatio(null);
-      setRecognitionFeedbackSaved(false);
-      setRouteInfo(null);
+      resetRecognitionDetails();
       setHint(null);
       setPhase("selfCheck");
     }, RECORD_MS);
@@ -347,7 +353,8 @@ export default function PracticePage() {
           setOutcome("fail");
           setConfidence(0);
           setPredicted("low_tracking");
-          setTopPredictions([]);
+          resetRecognitionDetails();
+          setTrackingRatio(averageTracking);
           setHint(
             `I only tracked hands in ${ratioPct}% of the capture. Move closer, keep both hands inside the guide box, and try again with brighter lighting.`
           );
@@ -391,17 +398,23 @@ export default function PracticePage() {
         current.sign_id,
         feedbackSummary
       );
-      const result = evaluateAttempt(
+      let result = evaluateAttempt(
         current.sign_id,
         predictedLabel,
         conf,
         signThresholds.passThreshold,
         signThresholds.retryThreshold
       );
+      const agreement = modelResult.agreement ?? 1;
+      if (result.outcome === "pass" && agreement < MIN_WINDOW_AGREEMENT_FOR_PASS) {
+        result = { ...result, outcome: "retry" };
+      }
       setOutcome(result.outcome);
       setConfidence(result.confidence);
       setPredicted(predictedLabel);
       setTopPredictions(top);
+      setWindowPredictions(modelResult.windowPredictions ?? []);
+      setWindowAgreement(modelResult.agreement ?? null);
       setRouteInfo(nextRouteInfo);
 
       const watchlistSelfCheck =
@@ -411,7 +424,9 @@ export default function PracticePage() {
       const hintReason =
         result.outcome === "retry" ? "framing" : result.outcome === "fail" ? "fail" : "pass";
       if (result.outcome !== "pass") {
-        const targetedHint = watchlistSelfCheck ? null : confusionHint(calibration, current.sign_id, predictedLabel);
+        const targetedHint = agreement < MIN_WINDOW_AGREEMENT_FOR_PASS
+          ? "The model only saw that result in part of the recording. Try again with a slower, centered sign so all capture windows agree."
+          : watchlistSelfCheck ? null : confusionHint(calibration, current.sign_id, predictedLabel);
         if (targetedHint) {
           setHint(targetedHint);
         } else if (watchlistSelfCheck) {
@@ -434,9 +449,7 @@ export default function PracticePage() {
       setOutcome("fail");
       setConfidence(0);
       setPredicted("");
-      setTopPredictions([]);
-      setTrackingRatio(null);
-      setRouteInfo(null);
+      resetRecognitionDetails();
       setHint("Model could not run. Ensure model files are synced and reload.");
       setPhase("result");
       trackEvent("inference_error", { error: String(err) });
@@ -445,7 +458,7 @@ export default function PracticePage() {
 
   const recordAndEvaluate = () => {
     setRecognitionFeedbackSaved(false);
-    setRouteInfo(null);
+    resetRecognitionDetails();
     // The model-specific capture path inside evaluate() waits for its capture window.
     // UI just needs to flip to "recording".
     setPhase("recording");
@@ -455,10 +468,7 @@ export default function PracticePage() {
   const nextSign = () => {
     setOutcome(null);
     setHint(null);
-    setTopPredictions([]);
-    setTrackingRatio(null);
-    setRouteInfo(null);
-    setRecognitionFeedbackSaved(false);
+    resetRecognitionDetails();
     setPhase("prompt");
     if (index + 1 < orderedSigns.length) setIndex(index + 1);
     else setIndex(0);
@@ -475,6 +485,8 @@ export default function PracticePage() {
       accepted: correct,
       correct,
       top_predictions: topPredictions,
+      window_predictions: windowPredictions,
+      agreement: windowAgreement ?? undefined,
       tracking_ratio: trackingRatio,
       model_version: modelVersion,
       routed_by: routeInfo?.routedBy,
@@ -770,6 +782,22 @@ export default function PracticePage() {
               <p style={{ color: "var(--muted)" }}>
                 Hand tracking: {Math.round(trackingRatio * 100)}% of frames
               </p>
+            )}
+            {practiceMode === "recognition" && windowAgreement !== null && windowPredictions.length > 1 && (
+              <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
+                <strong>Recognition consistency</strong>
+                <p style={{ margin: "0.25rem 0 0" }}>
+                  {Math.round(windowAgreement * 100)}% agreement across capture windows
+                  {windowAgreement < MIN_WINDOW_AGREEMENT_FOR_PASS ? ". Try once more before trusting this result." : "."}
+                </p>
+                <ol style={{ margin: "0.35rem 0 0", paddingLeft: "1.4rem" }}>
+                  {windowPredictions.map((p, i) => (
+                    <li key={`${p.label}-${i}`}>
+                      Window {i + 1}: {p.label} ({(p.confidence * 100).toFixed(0)}%)
+                    </li>
+                  ))}
+                </ol>
+              </div>
             )}
             {practiceMode === "recognition" && topPredictions.length > 0 && (
               <div style={{ marginTop: "0.5rem" }}>
