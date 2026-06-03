@@ -6,7 +6,7 @@ import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from 
 import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
 import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
-import { loadModel, runInference, getLabels, ModelUnavailableError, summarizeProbabilities } from "../lib/inference";
+import { loadModel, runInference, runInferenceBatch, getLabels, ModelUnavailableError } from "../lib/inference";
 import { confusionHint, loadRecognitionCalibration, reliabilityFor, thresholdsFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import { buildConfusionDrillSigns, buildLearningPriorities } from "../lib/learningPlan";
 import { personalizeThresholds } from "../lib/personalCalibration";
@@ -58,13 +58,6 @@ function outcomeLabel(outcome: string) {
   if (outcome === "pass") return "pass";
   if (outcome === "retry") return "needs practice";
   return outcome;
-}
-
-function averageProbabilities(rows: number[][]) {
-  if (rows.length === 0) return [];
-  const out = new Array(rows[0].length).fill(0);
-  rows.forEach((row) => row.forEach((p, i) => (out[i] += p)));
-  return out.map((p) => p / rows.length);
 }
 
 function liveTrackingLabel(ratio: number | null) {
@@ -328,7 +321,7 @@ export default function PracticePage() {
     const modelSz = meta?.frame_size ?? 32;
     try {
       let modelInput: Float32Array;
-      let averagedProbs: number[] | null = null;
+      let modelResult: Awaited<ReturnType<typeof runInference>> | null = null;
       if (meta?.input_type === "hand_landmarks") {
         const samples = await captureHandLandmarkWindows(videoRef.current, 3, captureFrameCount, MULTI_WINDOW_CAPTURE_MS);
         const bestSample = samples.reduce((best, sample) =>
@@ -355,8 +348,7 @@ export default function PracticePage() {
           return;
         }
         setPhase("evaluating");
-        const results = await Promise.all(samples.map((sample) => runInference(sample.tensor)));
-        averagedProbs = averageProbabilities(results.map((result) => result.probs));
+        modelResult = await runInferenceBatch(samples.map((sample) => sample.tensor));
       } else {
         const rawFrames = await captureFramesAsync(
           videoRef.current,
@@ -371,7 +363,7 @@ export default function PracticePage() {
             : framesToTensor(rawFrames, captureFrameCount, captureSz, captureSz);
       }
       setPhase("evaluating");
-      const modelResult = averagedProbs ? summarizeProbabilities(averagedProbs) : await runInference(modelInput);
+      modelResult = modelResult ?? await runInference(modelInput);
       const { predictedLabel, confidence: conf, topPredictions: top } = modelResult;
       const signThresholds = personalizeThresholds(
         thresholdsFor(calibration, current.sign_id),

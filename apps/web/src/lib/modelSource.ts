@@ -33,18 +33,27 @@ export const BUNDLED_SOURCE: ModelSource = {
 // browser can't fetch model files directly from the GitHub Release URL.
 // Route through the API's /model_proxy/{tag}/{file} endpoint instead, which
 // streams the file with our own CORS-allowed origin.
-function releaseToSource(tag: string, assets: { name: string }[]): ModelSource | null {
-  const names = new Set(assets.map((a) => a.name));
-  if (!names.has("model.onnx") || !names.has("labels.json")) return null;
+export function releaseTagToModelSource(tag: string, label = `Release: ${tag}`): ModelSource {
   const proxy = (file: string) => `${API_URL}/model_proxy/${encodeURIComponent(tag)}/${file}`;
   return {
     id: `release:${tag}`,
-    label: `Release: ${tag}`,
+    label,
     modelUrl: proxy("model.onnx"),
     labelsUrl: proxy("labels.json"),
-    metaUrl: names.has("model_meta.json") ? proxy("model_meta.json") : "/models/model_meta.json",
+    metaUrl: proxy("model_meta.json"),
+    calibrationUrl: proxy("recognition_calibration.json"),
+  };
+}
+
+function releaseToSource(tag: string, assets: { name: string }[]): ModelSource | null {
+  const names = new Set(assets.map((a) => a.name));
+  if (!names.has("model.onnx") || !names.has("labels.json")) return null;
+  const source = releaseTagToModelSource(tag);
+  return {
+    ...source,
+    metaUrl: names.has("model_meta.json") ? source.metaUrl : "/models/model_meta.json",
     calibrationUrl: names.has("recognition_calibration.json")
-      ? proxy("recognition_calibration.json")
+      ? source.calibrationUrl
       : "/models/recognition_calibration.json",
   };
 }

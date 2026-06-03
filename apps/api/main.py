@@ -60,7 +60,7 @@ def health():
 # file. This proxy streams the file through the API (which DOES have CORS
 # configured) so the model-source selector can swap between trained models
 # without re-syncing files locally.
-_MODEL_PROXY_ALLOWED = {"model.onnx", "labels.json", "model_meta.json"}
+_MODEL_PROXY_ALLOWED = {"model.onnx", "labels.json", "model_meta.json", "recognition_calibration.json"}
 _MODEL_PROXY_REPO = "tylerxia8/ASL-machine"
 
 

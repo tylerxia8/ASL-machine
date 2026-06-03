@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "primarySourceId": "bundled",
+  "specialists": [
+    {
+      "id": "v32-weighted",
+      "label": "v32 weighted specialist",
+      "releaseTag": "wave1-semlex-aslcitizen-wlasl-popsign-v32-weighted",
+      "allowedSigns": ["four", "three", "yes", "no", "meet", "how", "thank_you", "two"],
+      "minConfidence": 0.42,
+      "minMargin": 0.08,
+      "maxPrimaryConfidence": 0.88
+    }
+  ]
+}
