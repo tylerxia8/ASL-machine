@@ -103,6 +103,13 @@ export default function ProgressPage() {
     })
     .sort((a, b) => b.rejected - a.rejected || b.total - a.total)
     .slice(0, 8);
+  const routedRows = Object.entries(feedbackSummary.routed.byRoute)
+    .map(([routeId, row]) => ({
+      routeId,
+      ...row,
+      accuracy: row.total ? row.accepted / row.total : 0,
+    }))
+    .sort((a, b) => b.total - a.total);
 
   const exportFeedback = (format: "csv" | "json") => {
     if (format === "csv") {
@@ -242,6 +249,35 @@ export default function ProgressPage() {
                   <span className="status-pass">{feedbackSummary.accepted} right</span> /{" "}
                   <span className="status-fail">{feedbackSummary.rejected} wrong</span>
                 </p>
+                {feedbackSummary.routed.total > 0 && (
+                  <>
+                    <strong>Specialist overrides</strong>
+                    <table className="compact-table">
+                      <thead>
+                        <tr>
+                          <th>Route</th>
+                          <th>Votes</th>
+                          <th>Right</th>
+                          <th>Wrong</th>
+                          <th>Accuracy</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {routedRows.map((row) => (
+                          <tr key={row.routeId}>
+                            <td>
+                              <code>{row.routeId}</code>
+                            </td>
+                            <td>{row.total}</td>
+                            <td>{row.accepted}</td>
+                            <td>{row.rejected}</td>
+                            <td>{Math.round(row.accuracy * 100)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
                 {feedbackRows.length > 0 && (
                   <table className="compact-table">
                     <thead>

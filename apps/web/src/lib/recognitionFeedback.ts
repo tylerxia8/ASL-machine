@@ -10,6 +10,11 @@ export type RecognitionFeedbackEntry = {
   top_predictions?: { label: string; confidence: number }[];
   tracking_ratio?: number | null;
   model_version?: string;
+  routed_by?: string;
+  primary_predicted_label?: string;
+  primary_confidence?: number;
+  specialist_predicted_label?: string;
+  specialist_confidence?: number;
 };
 
 export type RecognitionFeedbackSummary = {
@@ -25,6 +30,12 @@ export type RecognitionFeedbackSummary = {
       commonPredictions: Record<string, number>;
     }
   >;
+  routed: {
+    total: number;
+    accepted: number;
+    rejected: number;
+    byRoute: Record<string, { total: number; accepted: number; rejected: number }>;
+  };
 };
 
 const STORAGE_KEY = "recognition_feedback";
@@ -60,6 +71,7 @@ export function summarizeRecognitionFeedback(entries: RecognitionFeedbackEntry[]
     accepted: 0,
     rejected: 0,
     bySign: {},
+    routed: { total: 0, accepted: 0, rejected: 0, byRoute: {} },
   };
 
   for (const entry of entries) {
@@ -77,19 +89,47 @@ export function summarizeRecognitionFeedback(entries: RecognitionFeedbackEntry[]
 
     const predicted = feedbackPredictedLabel(entry);
     row.commonPredictions[predicted] = (row.commonPredictions[predicted] ?? 0) + 1;
+
+    if (entry.routed_by) {
+      summary.routed.total += 1;
+      if (accepted) summary.routed.accepted += 1;
+      else summary.routed.rejected += 1;
+      const route =
+        summary.routed.byRoute[entry.routed_by] ??
+        (summary.routed.byRoute[entry.routed_by] = { total: 0, accepted: 0, rejected: 0 });
+      route.total += 1;
+      if (accepted) route.accepted += 1;
+      else route.rejected += 1;
+    }
   }
 
   return summary;
 }
 
 export function recognitionFeedbackCsv(entries: RecognitionFeedbackEntry[]) {
-  const header = ["timestamp", "sign_id", "predicted_label", "confidence", "accepted"];
+  const header = [
+    "timestamp",
+    "sign_id",
+    "predicted_label",
+    "confidence",
+    "accepted",
+    "routed_by",
+    "primary_predicted_label",
+    "primary_confidence",
+    "specialist_predicted_label",
+    "specialist_confidence",
+  ];
   const rows = entries.map((entry) => [
     entry.ts ? new Date(entry.ts).toISOString() : "",
     feedbackSignId(entry),
     feedbackPredictedLabel(entry),
     typeof entry.confidence === "number" ? entry.confidence.toFixed(6) : "",
     feedbackAccepted(entry) ? "true" : "false",
+    entry.routed_by ?? "",
+    entry.primary_predicted_label ?? "",
+    typeof entry.primary_confidence === "number" ? entry.primary_confidence.toFixed(6) : "",
+    entry.specialist_predicted_label ?? "",
+    typeof entry.specialist_confidence === "number" ? entry.specialist_confidence.toFixed(6) : "",
   ]);
   return [header, ...rows]
     .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","))

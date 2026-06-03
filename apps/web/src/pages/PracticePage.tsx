@@ -91,6 +91,13 @@ export default function PracticePage() {
   const [confidence, setConfidence] = useState(0);
   const [predicted, setPredicted] = useState("");
   const [topPredictions, setTopPredictions] = useState<{ label: string; confidence: number }[]>([]);
+  const [routeInfo, setRouteInfo] = useState<{
+    routedBy: string;
+    primaryLabel: string;
+    primaryConfidence: number;
+    specialistLabel: string;
+    specialistConfidence: number;
+  } | null>(null);
   const [trackingRatio, setTrackingRatio] = useState<number | null>(null);
   const [liveTrackingRatio, setLiveTrackingRatio] = useState<number | null>(null);
   const [calibration, setCalibration] = useState<RecognitionCalibration | null>(null);
@@ -207,7 +214,8 @@ export default function PracticePage() {
     result: EvalOutcome,
     conf: number | undefined,
     predictedLabel: string,
-    source: "self_check" | "model"
+    source: "self_check" | "model",
+    routeDetails = routeInfo
   ) => {
     if (!current) return;
     await recordAttempt(
@@ -226,6 +234,7 @@ export default function PracticePage() {
       outcome: result,
       confidence: conf ?? null,
       source,
+      routed_by: routeDetails?.routedBy,
     });
     const log = [...sessionLog, { sign: current.sign_id, outcome: result }];
     setSessionLog(log);
@@ -244,6 +253,7 @@ export default function PracticePage() {
     setHint(null);
     setPredicted("");
     setTopPredictions([]);
+    setRouteInfo(null);
     setTrackingRatio(null);
     setRecognitionFeedbackSaved(false);
     setConfidence(0);
@@ -260,6 +270,7 @@ export default function PracticePage() {
     setPhase("prompt");
     setOutcome(null);
     setHint(null);
+    setRouteInfo(null);
   };
 
   const startSelfCheck = () => {
@@ -271,6 +282,7 @@ export default function PracticePage() {
       setTopPredictions([]);
       setTrackingRatio(null);
       setRecognitionFeedbackSaved(false);
+      setRouteInfo(null);
       setHint(null);
       setPhase("selfCheck");
     }, RECORD_MS);
@@ -365,6 +377,15 @@ export default function PracticePage() {
       setPhase("evaluating");
       modelResult = modelResult ?? await runInference(modelInput);
       const { predictedLabel, confidence: conf, topPredictions: top } = modelResult;
+      const nextRouteInfo = modelResult.routedBy && modelResult.primaryPrediction && modelResult.specialistPrediction
+        ? {
+            routedBy: modelResult.routedBy,
+            primaryLabel: modelResult.primaryPrediction.predictedLabel,
+            primaryConfidence: modelResult.primaryPrediction.confidence,
+            specialistLabel: modelResult.specialistPrediction.predictedLabel,
+            specialistConfidence: modelResult.specialistPrediction.confidence,
+          }
+        : null;
       const signThresholds = personalizeThresholds(
         thresholdsFor(calibration, current.sign_id),
         current.sign_id,
@@ -381,6 +402,7 @@ export default function PracticePage() {
       setConfidence(result.confidence);
       setPredicted(predictedLabel);
       setTopPredictions(top);
+      setRouteInfo(nextRouteInfo);
 
       const watchlistSelfCheck =
         reliabilityFor(calibration?.thresholds?.[current.sign_id]) === "weak" &&
@@ -403,7 +425,7 @@ export default function PracticePage() {
       }
 
       try {
-        await saveOutcome(result.outcome, conf, predictedLabel, "model");
+        await saveOutcome(result.outcome, conf, predictedLabel, "model", nextRouteInfo);
       } catch (err) {
         trackEvent("attempt_record_error", { error: String(err), source: "model" });
       }
@@ -414,6 +436,7 @@ export default function PracticePage() {
       setPredicted("");
       setTopPredictions([]);
       setTrackingRatio(null);
+      setRouteInfo(null);
       setHint("Model could not run. Ensure model files are synced and reload.");
       setPhase("result");
       trackEvent("inference_error", { error: String(err) });
@@ -422,6 +445,7 @@ export default function PracticePage() {
 
   const recordAndEvaluate = () => {
     setRecognitionFeedbackSaved(false);
+    setRouteInfo(null);
     // The model-specific capture path inside evaluate() waits for its capture window.
     // UI just needs to flip to "recording".
     setPhase("recording");
@@ -433,6 +457,7 @@ export default function PracticePage() {
     setHint(null);
     setTopPredictions([]);
     setTrackingRatio(null);
+    setRouteInfo(null);
     setRecognitionFeedbackSaved(false);
     setPhase("prompt");
     if (index + 1 < orderedSigns.length) setIndex(index + 1);
@@ -441,7 +466,7 @@ export default function PracticePage() {
 
   const saveRecognitionFeedback = (correct: boolean) => {
     if (!current || !predicted || predicted === "low_tracking") return;
-    const entry = {
+      const entry = {
       signId: current.sign_id,
       sign_id: current.sign_id,
       predictedLabel: predicted,
@@ -452,6 +477,11 @@ export default function PracticePage() {
       top_predictions: topPredictions,
       tracking_ratio: trackingRatio,
       model_version: modelVersion,
+      routed_by: routeInfo?.routedBy,
+      primary_predicted_label: routeInfo?.primaryLabel,
+      primary_confidence: routeInfo?.primaryConfidence,
+      specialist_predicted_label: routeInfo?.specialistLabel,
+      specialist_confidence: routeInfo?.specialistConfidence,
       ts: Date.now(),
     };
     try {
@@ -720,6 +750,16 @@ export default function PracticePage() {
                 Detected: {predicted} ({(confidence * 100).toFixed(0)}%)
               </p>
             )}
+            {practiceMode === "recognition" && routeInfo && (
+              <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
+                <strong>Specialist model used</strong>
+                <p style={{ margin: "0.25rem 0 0" }}>
+                  {routeInfo.routedBy} changed the result from{" "}
+                  <code>{routeInfo.primaryLabel}</code> ({(routeInfo.primaryConfidence * 100).toFixed(0)}%) to{" "}
+                  <code>{routeInfo.specialistLabel}</code> ({(routeInfo.specialistConfidence * 100).toFixed(0)}%).
+                </p>
+              </div>
+            )}
             {practiceMode === "recognition" && currentReliability === "weak" && predicted === current?.sign_id && (
               <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
                 <strong>Model watchlist</strong>
@@ -771,6 +811,7 @@ export default function PracticePage() {
                     setHint(null);
                     setTopPredictions([]);
                     setTrackingRatio(null);
+                    setRouteInfo(null);
                   }}
                 >
                   Retry

@@ -8,6 +8,7 @@ import CapturePage from "./pages/CapturePage";
 import DryRunPage from "./pages/DryRunPage";
 import PhrasePage from "./pages/PhrasePage";
 import ReviewCapturesPage from "./pages/ReviewCapturesPage";
+import ModelHealthPage from "./pages/ModelHealthPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
@@ -31,6 +32,7 @@ export default function App() {
             <NavLink to="/review-captures">Review</NavLink>
             <NavLink to="/phrases">Phrases</NavLink>
             <NavLink to="/dry-run">Dry run</NavLink>
+            <NavLink to="/model-health">Model</NavLink>
             <span style={{ marginLeft: "auto", color: "var(--muted)", fontSize: "0.85rem" }}>
               {user?.email ?? `Dev: ${devUserId.slice(0, 12)}`}
             </span>
@@ -95,6 +97,14 @@ export default function App() {
           element={
             <Protected>
               <DryRunPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/model-health"
+          element={
+            <Protected>
+              <ModelHealthPage />
             </Protected>
           }
         />

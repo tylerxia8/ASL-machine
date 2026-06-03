@@ -204,6 +204,9 @@ export default function LobbyPage() {
           <Link to="/review-captures" className="btn btn-secondary">
             Review captures
           </Link>
+          <Link to="/model-health" className="btn btn-secondary">
+            Model health
+          </Link>
         </div>
       </div>
       <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>

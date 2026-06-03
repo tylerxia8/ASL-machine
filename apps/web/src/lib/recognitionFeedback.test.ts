@@ -21,4 +21,27 @@ describe("recognition feedback", () => {
 
     expect(csv).toContain('"how","who","0.420000","false"');
   });
+
+  it("summarizes routed specialist feedback", () => {
+    const summary = summarizeRecognitionFeedback([
+      {
+        sign_id: "four",
+        predicted_label: "four",
+        accepted: true,
+        routed_by: "v32-weighted",
+        primary_predicted_label: "where",
+        specialist_predicted_label: "four",
+      },
+      {
+        sign_id: "four",
+        predicted_label: "four",
+        accepted: false,
+        routed_by: "v32-weighted",
+      },
+    ]);
+
+    expect(summary.routed.total).toBe(2);
+    expect(summary.routed.accepted).toBe(1);
+    expect(summary.routed.byRoute["v32-weighted"].rejected).toBe(1);
+  });
 });
