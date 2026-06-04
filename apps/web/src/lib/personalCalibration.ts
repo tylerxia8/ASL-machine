@@ -15,7 +15,11 @@ export function personalizeThresholds(
   if (base.passThreshold > 1) return { ...base, adjustment: 0 };
 
   const missRate = row.rejected / row.total;
-  const adjustment = missRate >= 0.5 ? 0.06 : missRate <= 0.15 ? -0.03 : 0;
+  const lowQualityRate =
+    (row.lowAgreement + row.lowTracking) / Math.max(row.agreementSamples + row.trackingSamples, 1);
+  let adjustment = missRate >= 0.5 ? 0.06 : missRate <= 0.15 ? -0.03 : 0;
+  if (lowQualityRate >= 0.35) adjustment += 0.03;
+  if (row.total >= 6 && missRate === 0 && lowQualityRate === 0) adjustment -= 0.02;
   return {
     passThreshold: clamp(base.passThreshold + adjustment, 0.55, 0.96),
     retryThreshold: clamp(base.retryThreshold + adjustment / 2, 0.4, 0.9),

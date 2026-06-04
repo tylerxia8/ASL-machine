@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import ReferenceVideo from "../components/ReferenceVideo";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
-import { requestCamera, captureFramesAsync, framesToTensor, CameraError } from "../lib/camera";
+import { requestCamera, captureFramesAsync, framesToTensor, recordVideo, CameraError } from "../lib/camera";
 import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, runInferenceBatch, getLabels, ModelUnavailableError } from "../lib/inference";
@@ -17,11 +17,22 @@ type Phase = "prompt" | "recording" | "selfCheck" | "evaluating" | "result";
 type PracticeMode = "guided" | "recognition";
 type PracticeOrder = "weak_first" | "confusions" | "default" | "shuffle";
 type SignReference = { handshape: string; movement: string; location: string };
+type CorrectionClip = {
+  filename: string;
+  sign_id: string;
+  predicted_label: string;
+  confidence: number;
+  agreement?: number;
+  tracking_ratio?: number | null;
+  captured_at: string;
+};
 
 const RECORD_MS = 2000;
 const MIN_HAND_TRACKING_RATIO = 0.35;
 const MULTI_WINDOW_CAPTURE_MS = 2400;
 const MIN_WINDOW_AGREEMENT_FOR_PASS = 0.67;
+const CORRECTION_RECORD_MS = 2200;
+const CORRECTION_MANIFEST_KEY = "recognition_correction_clips";
 const PRACTICE_MODE_KEY = "practice_mode";
 const PRACTICE_ORDER_KEY = "practice_order";
 const WATCHLIST_SELF_CHECK_HINT =
@@ -112,6 +123,8 @@ export default function PracticePage() {
   const [showReference, setShowReference] = useState(false);
   const [sessionLog, setSessionLog] = useState<{ sign: string; outcome: string }[]>([]);
   const [recognitionFeedback, setRecognitionFeedback] = useState(readRecognitionFeedback);
+  const [correctionStatus, setCorrectionStatus] = useState("");
+  const [correctionClips, setCorrectionClips] = useState<CorrectionClip[]>([]);
   const sessionId = sessionStorage.getItem("practice_session_id") || undefined;
   const wave = Number(sessionStorage.getItem("practice_wave") || "1");
 
@@ -124,10 +137,28 @@ export default function PracticePage() {
   }, [calibration, feedbackSummary, practiceOrder, signs]);
   const current = orderedSigns[index];
   const currentReliability = current ? reliabilityFor(calibration?.thresholds?.[current.sign_id]) : "watch";
+  const currentFeedback = current ? feedbackSummary.bySign[current.sign_id] : null;
+  const currentThresholds = current ? thresholdsFor(calibration, current.sign_id) : null;
+  const currentConfusions = useMemo(() => {
+    if (!current) return [];
+    return Object.entries(calibration?.confusions ?? {})
+      .map(([pair, row]) => {
+        const [prompt, confusedWith] = pair.split("->");
+        return { prompt, confusedWith, count: row.count ?? 0, message: row.message };
+      })
+      .filter((row) => row.prompt === current.sign_id)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 2);
+  }, [calibration, current]);
 
   useEffect(() => {
     const saved = sessionStorage.getItem("session_log");
     if (saved) setSessionLog(JSON.parse(saved));
+    try {
+      setCorrectionClips(JSON.parse(localStorage.getItem(CORRECTION_MANIFEST_KEY) || "[]"));
+    } catch {
+      setCorrectionClips([]);
+    }
     fetchSigns(wave >= 99 ? undefined : wave).then(setSigns).catch(console.error);
     loadModel()
       .then((m) => {
@@ -264,6 +295,7 @@ export default function PracticePage() {
     setOutcome(null);
     setHint(null);
     setPredicted("");
+    setCorrectionStatus("");
     resetRecognitionDetails();
     setConfidence(0);
   };
@@ -279,6 +311,7 @@ export default function PracticePage() {
     setPhase("prompt");
     setOutcome(null);
     setHint(null);
+    setCorrectionStatus("");
     resetRecognitionDetails();
   };
 
@@ -290,6 +323,7 @@ export default function PracticePage() {
       setPredicted("");
       resetRecognitionDetails();
       setHint(null);
+      setCorrectionStatus("");
       setPhase("selfCheck");
     }, RECORD_MS);
   };
@@ -458,6 +492,7 @@ export default function PracticePage() {
 
   const recordAndEvaluate = () => {
     setRecognitionFeedbackSaved(false);
+    setCorrectionStatus("");
     resetRecognitionDetails();
     // The model-specific capture path inside evaluate() waits for its capture window.
     // UI just needs to flip to "recording".
@@ -468,6 +503,7 @@ export default function PracticePage() {
   const nextSign = () => {
     setOutcome(null);
     setHint(null);
+    setCorrectionStatus("");
     resetRecognitionDetails();
     setPhase("prompt");
     if (index + 1 < orderedSigns.length) setIndex(index + 1);
@@ -509,6 +545,52 @@ export default function PracticePage() {
     setRecognitionFeedbackSaved(true);
   };
 
+  const recordCorrectionClip = async () => {
+    if (!current || !streamRef.current || !predicted || predicted === "low_tracking") return;
+    setCorrectionStatus("Recording correction clip...");
+    try {
+      const blob = await recordVideo(streamRef.current, CORRECTION_RECORD_MS);
+      const filename = `${current.sign_id}_correction_pred-${predicted}_conf-${Math.round(confidence * 100)}_${Date.now()}.webm`;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const clip: CorrectionClip = {
+        filename,
+        sign_id: current.sign_id,
+        predicted_label: predicted,
+        confidence,
+        agreement: windowAgreement ?? undefined,
+        tracking_ratio: trackingRatio,
+        captured_at: new Date().toISOString(),
+      };
+      const next = [...correctionClips.slice(-99), clip];
+      setCorrectionClips(next);
+      localStorage.setItem(CORRECTION_MANIFEST_KEY, JSON.stringify(next));
+      trackEvent("correction_clip_recorded", clip);
+      setCorrectionStatus(`Saved correction clip ${filename} to Downloads.`);
+    } catch (err) {
+      setCorrectionStatus(`Correction clip failed: ${(err as Error).message}`);
+    }
+  };
+
+  const exportCorrectionManifest = () => {
+    const payload = {
+      exported_at: new Date().toISOString(),
+      incoming_dir: "ml\\data\\incoming",
+      clips: correctionClips,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `recognition_corrections_${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!current && signs.length === 0) {
     return (
       <div className="container">
@@ -540,6 +622,34 @@ export default function PracticePage() {
           </span>
         )}
       </p>
+      {practiceMode === "recognition" && current && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <strong>Recognition readiness</strong>
+          <div className="metric-grid" style={{ marginTop: "0.75rem", marginBottom: 0 }}>
+            <div>
+              <span className="metric-label">Model reliability</span>
+              <strong className={currentReliability === "strong" ? "status-pass" : currentReliability === "weak" ? "status-fail" : "status-retry"}>
+                {currentReliability}
+              </strong>
+            </div>
+            <div>
+              <span className="metric-label">Pass threshold</span>
+              <strong>{currentThresholds ? `${Math.round(currentThresholds.passThreshold * 100)}%` : "n/a"}</strong>
+            </div>
+            <div>
+              <span className="metric-label">Local feedback</span>
+              <strong>
+                {currentFeedback ? `${currentFeedback.rejected}/${currentFeedback.total} wrong` : "none yet"}
+              </strong>
+            </div>
+          </div>
+          {currentConfusions.length > 0 && (
+            <p style={{ color: "var(--muted)", fontSize: "0.9rem", marginBottom: 0 }}>
+              Often confused with: {currentConfusions.map((row) => `${row.confusedWith} (${row.count})`).join(", ")}.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="card" style={{ marginTop: "1rem", display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
         <strong>Mode</strong>
@@ -829,6 +939,23 @@ export default function PracticePage() {
                 {recognitionFeedbackSaved && <span className="status-pass">Saved</span>}
               </div>
             )}
+            {practiceMode === "recognition" && predicted && predicted !== "low_tracking" && outcome !== "pass" && (
+              <div className="hint-panel" style={{ marginTop: "0.75rem" }}>
+                <strong>Improve this sign</strong>
+                <p style={{ margin: "0.25rem 0 0" }}>
+                  Record a clean correction clip now. It will download locally and can be imported into the next training run.
+                </p>
+                <div className="button-row">
+                  <button className="btn" type="button" onClick={() => void recordCorrectionClip()}>
+                    Record correction clip
+                  </button>
+                  <button className="btn btn-secondary" type="button" disabled={correctionClips.length === 0} onClick={exportCorrectionManifest}>
+                    Export correction manifest
+                  </button>
+                </div>
+                {correctionStatus && <p style={{ color: "var(--muted)", fontSize: "0.9rem" }}>{correctionStatus}</p>}
+              </div>
+            )}
             <div style={{ display: "flex", gap: "0.75rem", marginTop: "1rem" }}>
               {outcome !== "pass" && (
                 <button
@@ -837,9 +964,8 @@ export default function PracticePage() {
                     setPhase("prompt");
                     setOutcome(null);
                     setHint(null);
-                    setTopPredictions([]);
-                    setTrackingRatio(null);
-                    setRouteInfo(null);
+                    setCorrectionStatus("");
+                    resetRecognitionDetails();
                   }}
                 >
                   Retry

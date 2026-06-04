@@ -51,6 +51,16 @@ export function buildLearningPriorities(
         reasons.push(`${localWrong}/${localTotal} local misses`);
       }
 
+      if (row?.lowAgreement) {
+        score += row.lowAgreement * 12;
+        reasons.push(`${row.lowAgreement} shaky recognitions`);
+      }
+
+      if (row?.lowTracking) {
+        score += row.lowTracking * 8;
+        reasons.push(`${row.lowTracking} low-tracking attempts`);
+      }
+
       if (clipCount < 10) {
         score += 30 - clipCount;
         reasons.push(`${clipCount} learner clips`);

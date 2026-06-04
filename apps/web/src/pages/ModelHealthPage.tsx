@@ -56,6 +56,16 @@ export default function ModelHealthPage() {
     ...row,
     accuracy: row.total ? row.accepted / row.total : 0,
   }));
+  const qualityRows = Object.entries(feedbackSummary.bySign)
+    .map(([signId, row]) => ({
+      signId,
+      ...row,
+      wrongRate: row.total ? row.rejected / row.total : 0,
+      qualityIssues: row.lowAgreement + row.lowTracking,
+    }))
+    .filter((row) => row.total >= 2)
+    .sort((a, b) => b.wrongRate - a.wrongRate || b.qualityIssues - a.qualityIssues)
+    .slice(0, 10);
 
   return (
     <div className="container">
@@ -220,6 +230,38 @@ export default function ModelHealthPage() {
           <Link to="/practice" className="btn">Practice routed signs</Link>
           <Link to="/capture" className="btn btn-secondary">Capture more clips</Link>
         </div>
+      </div>
+
+      <div className="card">
+        <strong>Local quality signals</strong>
+        {qualityRows.length === 0 ? (
+          <p style={{ color: "var(--muted)" }}>No repeated local recognition feedback yet.</p>
+        ) : (
+          <table className="compact-table">
+            <thead>
+              <tr>
+                <th>Sign</th>
+                <th>Wrong</th>
+                <th>Agreement</th>
+                <th>Tracking</th>
+                <th>Quality flags</th>
+              </tr>
+            </thead>
+            <tbody>
+              {qualityRows.map((row) => (
+                <tr key={row.signId}>
+                  <td><code>{row.signId}</code></td>
+                  <td>{row.rejected}/{row.total}</td>
+                  <td>{row.avgAgreement === null ? "n/a" : `${Math.round(row.avgAgreement * 100)}%`}</td>
+                  <td>{row.avgTrackingRatio === null ? "n/a" : `${Math.round(row.avgTrackingRatio * 100)}%`}</td>
+                  <td>
+                    {row.lowAgreement} shaky, {row.lowTracking} tracking
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

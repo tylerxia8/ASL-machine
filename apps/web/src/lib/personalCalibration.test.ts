@@ -13,6 +13,12 @@ function summary(rejected: number, total: number): RecognitionFeedbackSummary {
         total,
         accepted: total - rejected,
         rejected,
+        avgAgreement: null,
+        agreementSamples: 0,
+        lowAgreement: 0,
+        avgTrackingRatio: null,
+        trackingSamples: 0,
+        lowTracking: 0,
         commonPredictions: {},
       },
     },
@@ -36,5 +42,14 @@ describe("personalizeThresholds", () => {
     expect(next.passThreshold).toBe(1.01);
     expect(next.retryThreshold).toBe(0.82);
     expect(next.adjustment).toBe(0);
+  });
+
+  it("tightens thresholds when local attempts are low quality", () => {
+    const feedback = summary(1, 4);
+    feedback.bySign.how.lowAgreement = 3;
+    feedback.bySign.how.agreementSamples = 4;
+    const next = personalizeThresholds({ passThreshold: 0.8, retryThreshold: 0.6 }, "how", feedback);
+    expect(next.passThreshold).toBeCloseTo(0.83);
+    expect(next.retryThreshold).toBeCloseTo(0.615);
   });
 });

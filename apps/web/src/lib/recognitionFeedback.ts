@@ -29,6 +29,12 @@ export type RecognitionFeedbackSummary = {
       total: number;
       accepted: number;
       rejected: number;
+      avgAgreement: number | null;
+      agreementSamples: number;
+      lowAgreement: number;
+      avgTrackingRatio: number | null;
+      trackingSamples: number;
+      lowTracking: number;
       commonPredictions: Record<string, number>;
     }
   >;
@@ -84,10 +90,31 @@ export function summarizeRecognitionFeedback(entries: RecognitionFeedbackEntry[]
     const signId = feedbackSignId(entry);
     const row =
       summary.bySign[signId] ??
-      (summary.bySign[signId] = { total: 0, accepted: 0, rejected: 0, commonPredictions: {} });
+      (summary.bySign[signId] = {
+        total: 0,
+        accepted: 0,
+        rejected: 0,
+        avgAgreement: null,
+        agreementSamples: 0,
+        lowAgreement: 0,
+        avgTrackingRatio: null,
+        trackingSamples: 0,
+        lowTracking: 0,
+        commonPredictions: {},
+      });
     row.total += 1;
     if (accepted) row.accepted += 1;
     else row.rejected += 1;
+    if (typeof entry.agreement === "number") {
+      row.agreementSamples += 1;
+      row.avgAgreement = runningAverage(row.avgAgreement, entry.agreement, row.agreementSamples);
+      if (entry.agreement < 0.67) row.lowAgreement += 1;
+    }
+    if (typeof entry.tracking_ratio === "number") {
+      row.trackingSamples += 1;
+      row.avgTrackingRatio = runningAverage(row.avgTrackingRatio, entry.tracking_ratio, row.trackingSamples);
+      if (entry.tracking_ratio < 0.5) row.lowTracking += 1;
+    }
 
     const predicted = feedbackPredictedLabel(entry);
     row.commonPredictions[predicted] = (row.commonPredictions[predicted] ?? 0) + 1;
@@ -106,6 +133,11 @@ export function summarizeRecognitionFeedback(entries: RecognitionFeedbackEntry[]
   }
 
   return summary;
+}
+
+function runningAverage(previous: number | null, next: number, totalRows: number) {
+  if (previous === null || totalRows <= 1) return next;
+  return previous + (next - previous) / totalRows;
 }
 
 export function recognitionFeedbackCsv(entries: RecognitionFeedbackEntry[]) {
