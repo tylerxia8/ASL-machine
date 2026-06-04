@@ -46,14 +46,17 @@ export default function LearnPage() {
   };
 
   return (
-    <div className="container">
+    <div className="container wide-container">
       <Link to="/lobby">{"<-"} Lobby</Link>
-      <h1>Intro ASL Learn</h1>
-      <p style={{ color: "var(--muted)" }}>
-        A college-friendly path for weekly review: learn signs, practice short phrases, revisit missed signs, and keep culture notes close.
-      </p>
+      <section className="page-header">
+        <p className="eyebrow">Course path</p>
+        <h1>Intro ASL Learn</h1>
+        <p>
+          Weekly units, flashcards, phrases, and culture notes for a first college ASL course.
+        </p>
+      </section>
 
-      <div className="metric-grid">
+      <div className="metric-grid dashboard-metrics">
         <div>
           <span className="metric-label">Course units</span>
           <strong>{COURSE_UNITS.length}</strong>
@@ -94,6 +97,7 @@ export default function LearnPage() {
 
       <div className="learn-grid">
         <div>
+          <p className="eyebrow">Units</p>
           {COURSE_UNITS.map((unit) => {
             const progress = unitProgress(unit, mastery);
             return (
@@ -109,30 +113,49 @@ export default function LearnPage() {
                 <span>
                   <strong>{unit.week}</strong>
                   <span>{unit.title}</span>
+                  <small>{progress.mastered}/{progress.total} mastered</small>
                 </span>
-                <span>{progress.mastered}/{progress.total}</span>
+                <span className="unit-progress-dot">{Math.round(progress.pct * 100)}%</span>
               </button>
             );
           })}
         </div>
 
-        <div className="card">
-          <p style={{ color: "var(--muted)", marginTop: 0 }}>{selectedUnit.week}</p>
-          <h2 style={{ marginTop: 0 }}>{selectedUnit.title}</h2>
-          <p>{selectedUnit.goal}</p>
-          <div className="button-row">
-            <button className="btn" type="button" onClick={() => startUnitPractice(selectedUnit)}>
-              Practice this unit
-            </button>
-            <button className="btn btn-secondary" type="button" onClick={() => startUnitPractice(selectedUnit, "shuffle")}>
-              Quiz me
-            </button>
-            <Link to="/phrases" className="btn btn-secondary">
-              Phrase practice
-            </Link>
+        <div>
+          <div className="card unit-focus-card">
+            <p className="eyebrow">{selectedUnit.week}</p>
+            <h2>{selectedUnit.title}</h2>
+            <p>{selectedUnit.goal}</p>
+            <div className="progress-track">
+              <span style={{ width: `${Math.round(unitProgress(selectedUnit, mastery).pct * 100)}%` }} />
+            </div>
+            <div className="mode-grid compact-modes">
+              <button className="mode-card mode-card-button" type="button" onClick={() => startUnitPractice(selectedUnit)}>
+                <span className="mode-icon">A</span>
+                <strong>Practice</strong>
+                <small>Coach mode with camera feedback</small>
+              </button>
+              <button className="mode-card mode-card-button" type="button" onClick={() => startUnitPractice(selectedUnit, "shuffle")}>
+                <span className="mode-icon">B</span>
+                <strong>Quiz</strong>
+                <small>Mixed order for recall</small>
+              </button>
+              <Link to="/phrases" className="mode-card">
+                <span className="mode-icon">C</span>
+                <strong>Phrases</strong>
+                <small>Practice short sequences</small>
+              </Link>
+            </div>
           </div>
 
-          <h3>Flashcard</h3>
+          <div className="card flashcard-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Flashcards</p>
+              <h3>Watch, recall, sign</h3>
+            </div>
+            <span className="muted-small">{flashIndex + 1}/{Math.max(selectedSigns.length, 1)}</span>
+          </div>
           {currentFlash ? (
             <div>
               <div className="flashcard-title">
@@ -162,33 +185,48 @@ export default function LearnPage() {
           ) : (
             <p style={{ color: "var(--muted)" }}>Loading unit signs...</p>
           )}
-
-          <h3>Signs</h3>
-          <div className="phrase-strip">
-            {selectedUnit.signs.map((signId) => (
-              <span key={signId} className="tag-chip">
-                {signId}
-              </span>
-            ))}
           </div>
 
-          <h3>Phrase goals</h3>
-          <div className="phrase-strip">
-            {selectedUnit.phrases.map((phrase) => (
-              <span key={phrase} className="tag-chip">
-                {phrase} ({phraseSummary.byPhrase[phrase]?.total ?? 0})
-              </span>
-            ))}
-          </div>
-
-          <h3>Culture notes</h3>
-          <div className="review-grid">
-            {cultureCards.map((card) => (
-              <div key={card.id} className="mini-card">
-                <strong>{card.title}</strong>
-                <p>{card.body}</p>
+          <div className="card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Unit checklist</p>
+                <h3>Signs and phrases</h3>
               </div>
-            ))}
+            </div>
+            <div className="phrase-strip">
+              {selectedUnit.signs.map((signId) => (
+                <span key={signId} className="tag-chip">
+                  {signId}
+                </span>
+              ))}
+            </div>
+
+            <h3>Phrase goals</h3>
+            <div className="phrase-strip">
+              {selectedUnit.phrases.map((phrase) => (
+                <span key={phrase} className="tag-chip">
+                  {phrase} ({phraseSummary.byPhrase[phrase]?.total ?? 0})
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">Culture</p>
+                <h3>Classroom notes</h3>
+              </div>
+            </div>
+            <div className="review-grid">
+              {cultureCards.map((card) => (
+                <div key={card.id} className="mini-card">
+                  <strong>{card.title}</strong>
+                  <p>{card.body}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>

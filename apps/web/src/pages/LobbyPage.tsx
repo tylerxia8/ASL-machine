@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
-import { checkApiHealth, createSession, fetchProgress } from "../lib/api";
+import { checkApiHealth, createSession, fetchMastery, fetchProgress, type Mastery, type ProgressSummary } from "../lib/api";
+import { COURSE_UNITS, dueReviewSigns, unitProgress } from "../lib/coursePlan";
+import { practiceStreak, recommendedUnit, todayMissions } from "../lib/learnerDashboard";
 import {
   BUNDLED_SOURCE,
   ModelSource,
@@ -10,6 +12,7 @@ import {
   setSelectedSourceId,
 } from "../lib/modelSource";
 import { loadRecognitionCalibration, reliabilityFor, type RecognitionCalibration } from "../lib/recognitionCalibration";
+import { readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
 
 type ModelMeta = {
   model_version?: string;
@@ -20,7 +23,8 @@ type ModelMeta = {
 export default function LobbyPage() {
   const auth = useAuth();
   const userId = getUserId(auth);
-  const [progress, setProgress] = useState<{ mastered_count: number; total_attempts: number } | null>(null);
+  const [progress, setProgress] = useState<ProgressSummary | null>(null);
+  const [mastery, setMastery] = useState<Mastery[]>([]);
   const [apiOk, setApiOk] = useState<boolean | null>(null);
   const [apiUrl, setApiUrl] = useState("");
   const [modelInfo, setModelInfo] = useState("");
@@ -35,6 +39,7 @@ export default function LobbyPage() {
       setApiUrl(h.url);
     });
     fetchProgress(userId, auth.session?.access_token).then(setProgress).catch(() => setProgress(null));
+    fetchMastery(userId, auth.session?.access_token).then(setMastery).catch(() => setMastery([]));
     listReleaseSources().then((rs) => setSources([BUNDLED_SOURCE, ...rs]));
     loadRecognitionCalibration().then(setCalibration).catch(() => setCalibration(null));
   }, [userId, auth.session]);
@@ -102,30 +107,142 @@ export default function LobbyPage() {
         a.signId.localeCompare(b.signId)
     )
     .slice(0, 4);
+  const feedbackSummary = summarizeRecognitionFeedback(readRecognitionFeedback());
+  const dueSigns = dueReviewSigns(COURSE_UNITS, mastery, feedbackSummary);
+  const streak = practiceStreak(mastery);
+  const unit = recommendedUnit(COURSE_UNITS, mastery);
+  const unitStats = unitProgress(unit, mastery);
+  const missions = todayMissions({ summary: progress, feedback: feedbackSummary, dueCount: dueSigns.length });
 
   return (
-    <div className="container">
-      <h1>Practice Lobby</h1>
-      <div className="card" style={{ marginBottom: "1rem", fontSize: "0.9rem" }}>
+    <div className="container wide-container">
+      <section className="dashboard-hero">
         <div>
-          <span style={{ color: apiOk ? "var(--pass)" : apiOk === false ? "var(--fail)" : "var(--muted)" }}>
-            API {apiOk ? "connected" : apiOk === false ? "offline" : "checking..."} ({apiUrl})
-          </span>
-          <span style={{ marginLeft: "1rem", color: "var(--muted)" }}>Model: {modelInfo}</span>
-        </div>
-        {modelWarning && (
-          <p className="status-fail" style={{ margin: "0.5rem 0 0", fontSize: "0.85rem" }}>
-            {modelWarning}
+          <p className="eyebrow">Intro ASL study dashboard</p>
+          <h1>Ready for today’s practice?</h1>
+          <p>
+            Start with a short review, learn your next unit, or jump into phrases for class.
           </p>
-        )}
-        <div style={{ marginTop: "0.5rem", display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <label htmlFor="model-source" style={{ color: "var(--muted)" }}>
-            Source:
+          <div className="button-row">
+            <Link to="/learn" className="btn btn-large">
+              Continue learning
+            </Link>
+            <button className="btn btn-secondary btn-large" onClick={() => startSession(1, "weak_first")} disabled={apiOk === false}>
+              Quick review
+            </button>
+          </div>
+        </div>
+        <div className="hero-stats">
+          <div>
+            <span className="metric-label">Streak</span>
+            <strong>{streak} day{streak === 1 ? "" : "s"}</strong>
+          </div>
+          <div>
+            <span className="metric-label">Mastered</span>
+            <strong>{progress?.mastered_count ?? 0}</strong>
+          </div>
+          <div>
+            <span className="metric-label">Next unit</span>
+            <strong>{unit.week}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-grid">
+        <div className="card mission-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Today</p>
+              <h2>Daily missions</h2>
+            </div>
+            <Link to="/progress">Progress</Link>
+          </div>
+          <div className="mission-list">
+            {missions.map((mission) => (
+              <Link key={mission.id} to={mission.href} className={`mission-card mission-${mission.tone}`}>
+                <span>
+                  <strong>{mission.title}</strong>
+                  <small>{mission.detail}</small>
+                </span>
+                <span>{mission.cta}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        <div className="card next-unit-panel">
+          <p className="eyebrow">Recommended path</p>
+          <h2>{unit.title}</h2>
+          <p>{unit.goal}</p>
+          <div className="progress-track" aria-label={`${unitStats.mastered} of ${unitStats.total} mastered`}>
+            <span style={{ width: `${Math.round(unitStats.pct * 100)}%` }} />
+          </div>
+          <p className="muted-small">
+            {unitStats.mastered}/{unitStats.total} mastered - {unitStats.attempted} attempted
+          </p>
+          <div className="button-row">
+            <Link to="/learn" className="btn">
+              Open unit
+            </Link>
+            <button className="btn btn-secondary" onClick={() => startSession(1, "shuffle")} disabled={apiOk === false}>
+              Quiz me
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Study modes</p>
+            <h2>Choose how you want to practice</h2>
+          </div>
+        </div>
+        <div className="mode-grid">
+          <div className="mode-card">
+            <span className="mode-icon">1</span>
+            <h3>Guided lessons</h3>
+            <p>Weekly units, flashcards, phrases, and culture notes.</p>
+            <Link to="/learn" className="btn btn-secondary">Learn</Link>
+          </div>
+          <div className="mode-card">
+            <span className="mode-icon">2</span>
+            <h3>Recognition practice</h3>
+            <p>Use the camera for coached sign attempts and feedback.</p>
+            <button className="btn btn-secondary" onClick={() => startSession(1)} disabled={apiOk === false}>
+              Practice
+            </button>
+          </div>
+          <div className="mode-card">
+            <span className="mode-icon">3</span>
+            <h3>Phrases</h3>
+            <p>Build short sequences for intro ASL conversations.</p>
+            <Link to="/phrases" className="btn btn-secondary">Phrases</Link>
+          </div>
+          <div className="mode-card">
+            <span className="mode-icon">4</span>
+            <h3>Confusion drill</h3>
+            <p>Focus on signs the model or learner commonly mixes up.</p>
+            <button className="btn btn-secondary" onClick={() => startSession(1, "confusions")} disabled={apiOk === false}>
+              Drill
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <details className="technical-panel">
+        <summary>Model and project tools</summary>
+        <div className="card">
+          <p className="muted-small">
+            API {apiOk ? "connected" : apiOk === false ? "offline" : "checking"} ({apiUrl}) - Model: {modelInfo}
+          </p>
+          {modelWarning && <p className="status-fail">{modelWarning}</p>}
+          <label htmlFor="model-source" className="metric-label">
+            Model source
           </label>
           <select
             id="model-source"
             className="input"
-            style={{ maxWidth: "20rem" }}
             value={selectedSourceId}
             onChange={(e) => onModelChange(e.target.value)}
           >
@@ -135,106 +252,34 @@ export default function LobbyPage() {
               </option>
             ))}
           </select>
-          <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>(page will reload on change)</span>
-        </div>
-        {thresholdRows.length > 0 && (
-          <div className="metric-grid" style={{ margin: "0.75rem 0 0" }}>
+          <div className="metric-grid">
             <div>
-              <span className="metric-label">Strong signs</span>
+              <span className="metric-label">Strong</span>
               <strong>{modelHealth.strong}</strong>
             </div>
             <div>
-              <span className="metric-label">Watch signs</span>
-              <strong className={modelHealth.watch > 0 ? "status-retry" : undefined}>{modelHealth.watch}</strong>
+              <span className="metric-label">Watch</span>
+              <strong>{modelHealth.watch}</strong>
             </div>
             <div>
-              <span className="metric-label">Weak signs</span>
-              <strong className={modelHealth.weak > 0 ? "status-fail" : undefined}>{modelHealth.weak}</strong>
+              <span className="metric-label">Weak</span>
+              <strong>{modelHealth.weak}</strong>
             </div>
             <div>
               <span className="metric-label">Lowest F1</span>
               <strong>{weakestSigns[0]?.signId ?? "none"}</strong>
             </div>
           </div>
-        )}
-        {weakestSigns.length > 0 && (
-          <p style={{ color: "var(--muted)", margin: "0.75rem 0 0", fontSize: "0.85rem" }}>
-            Watchlist:{" "}
-            {weakestSigns.map((r) => `${r.signId} ${Math.round((r.row.f1 ?? 0) * 100)}%`).join(", ")}
-          </p>
-        )}
-      </div>
-      <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--accent)" }}>
-        <strong>Wave 1 track</strong>
-        <ol style={{ margin: "0.5rem 0", paddingLeft: "1.25rem", color: "var(--muted)" }}>
-          <li>
-            <Link to="/capture">Record clips</Link> {"->"} <code>import-from-downloads.ps1</code>
-          </li>
-          <li>
-            Double-click <code>scripts/continue-wave1.cmd</code> to retrain
-          </li>
-          <li>
-            <Link to="/dry-run">Run dry run checklist</Link>
-          </li>
-        </ol>
-      </div>
-      {progress && (
-        <div className="card" style={{ marginBottom: "1rem" }}>
-          <strong>Your progress</strong>
-          <p>
-            Mastered: {progress.mastered_count} - Attempts: {progress.total_attempts}
-          </p>
-          <Link to="/progress">View full history {"->"}</Link>
+          <div className="button-row">
+            <Link to="/capture" className="btn btn-secondary">Capture clips</Link>
+            <Link to="/review-captures" className="btn btn-secondary">Review captures</Link>
+            <Link to="/dry-run" className="btn btn-secondary">Dry run</Link>
+            <Link to="/model-health" className="btn btn-secondary">Model health</Link>
+          </div>
         </div>
-      )}
-      <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--retry)" }}>
-        <strong>Improve the model</strong>
-        <p style={{ color: "var(--muted)" }}>
-          Jump straight into weak-sign practice, drill known confusions, or capture new clips for retraining.
-        </p>
-        <div className="button-row">
-          <button className="btn" onClick={() => startSession(1, "weak_first")} disabled={apiOk === false}>
-            Fix weak signs
-          </button>
-          <button className="btn btn-secondary" onClick={() => startSession(1, "confusions")} disabled={apiOk === false}>
-            Drill confusions
-          </button>
-          <Link to="/capture" className="btn btn-secondary">
-            Capture training clips
-          </Link>
-          <Link to="/review-captures" className="btn btn-secondary">
-            Review captures
-          </Link>
-          <Link to="/model-health" className="btn btn-secondary">
-            Model health
-          </Link>
-        </div>
-      </div>
-      <div style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        <div className="card" style={{ outline: "2px solid var(--accent)" }}>
-          <h3>Wave 1 - Recommended</h3>
-          <p>25 trained signs: greetings, questions, numbers 1-5, common verbs</p>
-          <button className="btn" onClick={() => startSession(1)} disabled={apiOk === false}>
-            Start Wave 1 session
-          </button>
-        </div>
-        <div className="card">
-          <h3>Full catalog</h3>
-          <p>All 100+ signs (untrained signs show as reference only)</p>
-          <button className="btn btn-secondary" onClick={() => startSession(99)} disabled={apiOk === false}>
-            Start session
-          </button>
-        </div>
-        <div className="card">
-          <h3>Phrase mode</h3>
-          <p>Practice short prompted sequences built from trained Wave 1 signs</p>
-          <Link to="/phrases" className="btn btn-secondary">
-            Start phrases
-          </Link>
-        </div>
-      </div>
-      <p className="footer-meta" style={{ marginTop: "2rem" }}>
-        Web app URL may vary (e.g. :5176). API should match <code>apps/web/.env.local</code>.
+      </details>
+      <p className="footer-meta">
+        Inspired by common learning-product patterns: missions, mastery, study modes, and course progress.
       </p>
     </div>
   );
