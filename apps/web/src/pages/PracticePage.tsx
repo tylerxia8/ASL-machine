@@ -3,7 +3,16 @@ import { Link } from "react-router-dom";
 import { useAuth, getUserId } from "../lib/auth";
 import ReferenceVideo from "../components/ReferenceVideo";
 import { fetchSigns, fetchHint, recordAttempt, trackEvent, type SignMeta } from "../lib/api";
-import { requestCamera, captureFramesAsync, framesToTensor, recordVideo, CameraError } from "../lib/camera";
+import {
+  attachCameraStream,
+  requestCamera,
+  captureFramesAsync,
+  framesToTensor,
+  recordVideo,
+  streamIsLive,
+  waitForVideoReady,
+  CameraError,
+} from "../lib/camera";
 import { captureHandLandmarkWindows, getHandTrackingRatio } from "../lib/handLandmarks";
 import { downsampleForModel } from "../lib/clipFeatures";
 import { loadModel, runInference, runInferenceBatch, getLabels, ModelUnavailableError } from "../lib/inference";
@@ -98,6 +107,7 @@ export default function PracticePage() {
   const [phase, setPhase] = useState<Phase>("prompt");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraNeedsStart, setCameraNeedsStart] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [outcome, setOutcome] = useState<EvalOutcome | null>(null);
   const [practiceMode, setPracticeMode] = useState<PracticeMode>(readPracticeMode);
   const [practiceOrder, setPracticeOrder] = useState<PracticeOrder>(readPracticeOrder);
@@ -203,6 +213,7 @@ export default function PracticePage() {
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    setCameraReady(false);
     if (selfCheckUrl) URL.revokeObjectURL(selfCheckUrl);
   };
 
@@ -223,17 +234,17 @@ export default function PracticePage() {
   const startCamera = useCallback(async () => {
     setCameraError(null);
     setCameraNeedsStart(false);
+    setCameraReady(false);
     try {
       const stream = streamRef.current ?? await requestCamera();
       streamRef.current = stream;
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
         try {
-          await videoRef.current.play();
+          await attachCameraStream(videoRef.current, stream);
+          setCameraReady(true);
         } catch (err) {
-          const name = (err as { name?: string })?.name ?? "unknown";
           setCameraNeedsStart(true);
-          setCameraError(`Camera is ready, but the browser wants a button press first (${name}).`);
+          setCameraError(null);
           return;
         }
       }
@@ -337,11 +348,19 @@ export default function PracticePage() {
   };
 
   const startSelfCheck = async () => {
-    if (!streamRef.current) return;
+    if (!streamIsLive(streamRef.current)) {
+      await startCamera();
+    }
+    if (!streamIsLive(streamRef.current)) {
+      setHint("Camera preview is not active yet. Click Start camera preview, allow permission, then try again.");
+      return;
+    }
+    const stream = streamRef.current;
+    if (!stream) return;
     setPhase("recording");
     clearSelfCheckClip();
     try {
-      const blob = await recordVideo(streamRef.current, RECORD_MS);
+      const blob = await recordVideo(stream, RECORD_MS);
       setSelfCheckUrl(URL.createObjectURL(blob));
       setOutcome(null);
       setConfidence(0);
@@ -382,6 +401,24 @@ export default function PracticePage() {
 
   const evaluate = async () => {
     if (!videoRef.current || !current) return;
+    if (!streamIsLive(streamRef.current) || !cameraReady) {
+      await startCamera();
+      if (!videoRef.current || !streamIsLive(streamRef.current)) {
+        setOutcome("retry");
+        setHint("Camera preview is not active yet. Click Start camera preview, allow permission, then try again.");
+        setPhase("result");
+        return;
+      }
+      try {
+        await waitForVideoReady(videoRef.current);
+        setCameraReady(true);
+      } catch {
+        setOutcome("retry");
+        setHint("Camera opened, but the video preview is not visible yet. Wait a moment, then try again.");
+        setPhase("result");
+        return;
+      }
+    }
     try {
       await loadModel();
     } catch (e) {
@@ -576,10 +613,19 @@ export default function PracticePage() {
   };
 
   const recordCorrectionClip = async () => {
-    if (!current || !streamRef.current || !predicted || predicted === "low_tracking") return;
+    if (!current || !predicted || predicted === "low_tracking") return;
+    if (!streamIsLive(streamRef.current)) {
+      await startCamera();
+    }
+    if (!streamIsLive(streamRef.current)) {
+      setCorrectionStatus("Camera preview is not active yet. Click Start camera preview, allow permission, then try again.");
+      return;
+    }
+    const stream = streamRef.current;
+    if (!stream) return;
     setCorrectionStatus("Recording correction clip...");
     try {
-      const blob = await recordVideo(streamRef.current, CORRECTION_RECORD_MS);
+      const blob = await recordVideo(stream, CORRECTION_RECORD_MS);
       const filename = `${current.sign_id}_correction_pred-${predicted}_conf-${Math.round(confidence * 100)}_${Date.now()}.webm`;
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -759,8 +805,23 @@ export default function PracticePage() {
         </div>
       ) : (
         <div className="video-wrap" style={{ position: "relative" }}>
-          <video ref={videoRef} muted playsInline />
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            autoPlay
+            onLoadedMetadata={() => setCameraReady(true)}
+            onCanPlay={() => setCameraReady(true)}
+          />
           <div className="guide-box" title="Keep hands and face inside box" />
+          {(!cameraReady || cameraNeedsStart) && phase !== "recording" && phase !== "evaluating" && (
+            <div className="camera-overlay">
+              <strong>{cameraNeedsStart ? "Camera needs a click" : "Camera preview not visible yet"}</strong>
+              <button className="btn" type="button" onClick={() => void startCamera()}>
+                Start camera preview
+              </button>
+            </div>
+          )}
           {practiceMode === "recognition" && phase !== "recording" && phase !== "evaluating" && (
             <div
               style={{
@@ -837,12 +898,12 @@ export default function PracticePage() {
             )}
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
               {practiceMode === "guided" && (
-                <button className="btn" disabled={!!cameraError} onClick={() => void startSelfCheck()}>
+                <button className="btn" disabled={!!cameraError || !cameraReady} onClick={() => void startSelfCheck()}>
                   Record & self-check
                 </button>
               )}
               {practiceMode === "recognition" && current?.trained !== false && (
-                <button className="btn" disabled={!!cameraError || !!modelError} onClick={recordAndEvaluate}>
+                <button className="btn" disabled={!!cameraError || !!modelError || !cameraReady} onClick={recordAndEvaluate}>
                   Record & evaluate
                 </button>
               )}

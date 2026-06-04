@@ -17,6 +17,47 @@ export async function requestCamera(): Promise<MediaStream> {
   }
 }
 
+export function streamIsLive(stream: MediaStream | null | undefined) {
+  return !!stream?.getVideoTracks().some((track) => track.readyState === "live");
+}
+
+export async function attachCameraStream(video: HTMLVideoElement, stream: MediaStream) {
+  video.muted = true;
+  video.playsInline = true;
+  if (video.srcObject !== stream) video.srcObject = stream;
+  await waitForVideoReady(video);
+  try {
+    await video.play();
+  } catch (err) {
+    const name = (err as { name?: string })?.name ?? "unknown";
+    throw new Error(`Camera preview is ready, but the browser requires a click to start playback (${name}).`);
+  }
+}
+
+export function waitForVideoReady(video: HTMLVideoElement, timeoutMs = 2500) {
+  if (video.readyState >= HTMLMediaElement.HAVE_METADATA && video.videoWidth > 0) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve, reject) => {
+    const timeout = window.setTimeout(() => {
+      cleanup();
+      reject(new Error("Camera stream opened, but video preview did not become ready."));
+    }, timeoutMs);
+    const onReady = () => {
+      if (video.videoWidth <= 0) return;
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      video.removeEventListener("loadedmetadata", onReady);
+      video.removeEventListener("canplay", onReady);
+    };
+    video.addEventListener("loadedmetadata", onReady);
+    video.addEventListener("canplay", onReady);
+  });
+}
+
 type Planes = [number[], number[], number[]];
 export type PreprocessMode = "center_crop" | "letterbox";
 
@@ -113,6 +154,9 @@ export function captureFrames(
 export async function recordVideo(stream: MediaStream, durationMs: number): Promise<Blob> {
   if (typeof MediaRecorder === "undefined") {
     throw new Error("MediaRecorder is not supported in this browser.");
+  }
+  if (!streamIsLive(stream)) {
+    throw new Error("Camera is not active yet. Start the camera preview first.");
   }
   const mimeCandidates = [
     "video/webm;codecs=vp9",

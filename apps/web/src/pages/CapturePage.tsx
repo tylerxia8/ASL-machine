@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchSigns, fetchHint, type SignMeta, type HintResponse } from "../lib/api";
-import { requestCamera, recordVideo, CameraError } from "../lib/camera";
+import { attachCameraStream, requestCamera, recordVideo, streamIsLive, CameraError } from "../lib/camera";
 import { buildLearningPriorities } from "../lib/learningPlan";
 import { loadRecognitionCalibration, type RecognitionCalibration } from "../lib/recognitionCalibration";
 import { downloadText, readRecognitionFeedback, summarizeRecognitionFeedback } from "../lib/recognitionFeedback";
@@ -47,6 +47,7 @@ export default function CapturePage() {
   const [status, setStatus] = useState("");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraNeedsStart, setCameraNeedsStart] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [countdown, setCountdown] = useState(3);
   const lastDownloadUrlRef = useRef<string | null>(null);
@@ -99,17 +100,17 @@ export default function CapturePage() {
   const startCamera = useCallback(async () => {
     setCameraError(null);
     setCameraNeedsStart(false);
+    setCameraReady(false);
     try {
       const stream = streamRef.current ?? await requestCamera();
       streamRef.current = stream;
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
         try {
-          await videoRef.current.play();
+          await attachCameraStream(videoRef.current, stream);
+          setCameraReady(true);
         } catch (err) {
-          const name = (err as { name?: string })?.name ?? "unknown";
           setCameraNeedsStart(true);
-          setCameraError(`Camera is ready, but the browser wants a button press first (${name}).`);
+          setCameraError(null);
         }
       }
     } catch (e) {
@@ -123,6 +124,7 @@ export default function CapturePage() {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
+      setCameraReady(false);
       if (lastDownloadUrlRef.current) URL.revokeObjectURL(lastDownloadUrlRef.current);
     };
   }, [startCamera]);
@@ -135,7 +137,16 @@ export default function CapturePage() {
   }, [counts, signs]);
 
   const startRecord = async () => {
-    if (!current || !streamRef.current) return;
+    if (!current) return;
+    if (!streamIsLive(streamRef.current)) {
+      await startCamera();
+    }
+    if (!streamIsLive(streamRef.current)) {
+      setStatus("Camera preview is not active yet. Click Start camera preview, allow permission, then try again.");
+      return;
+    }
+    const stream = streamRef.current;
+    if (!stream) return;
     setStatus("");
     setPhase("countdown");
     for (let n = 3; n >= 1; n--) {
@@ -145,7 +156,7 @@ export default function CapturePage() {
     setPhase("recording");
     let blob: Blob;
     try {
-      blob = await recordVideo(streamRef.current, RECORD_MS);
+      blob = await recordVideo(stream, RECORD_MS);
     } catch (e) {
       setPhase("idle");
       setStatus((e as Error).message);
@@ -333,8 +344,23 @@ export default function CapturePage() {
         </div>
       ) : (
         <div className="video-wrap" style={{ position: "relative" }}>
-          <video ref={videoRef} muted playsInline />
+          <video
+            ref={videoRef}
+            muted
+            playsInline
+            autoPlay
+            onLoadedMetadata={() => setCameraReady(true)}
+            onCanPlay={() => setCameraReady(true)}
+          />
           <div className="guide-box" />
+          {(!cameraReady || cameraNeedsStart) && !busy && (
+            <div className="camera-overlay">
+              <strong>{cameraNeedsStart ? "Camera needs a click" : "Camera preview not visible yet"}</strong>
+              <button className="btn" type="button" onClick={() => void startCamera()}>
+                Start camera preview
+              </button>
+            </div>
+          )}
           {countingDown && (
             <div
               style={{
@@ -426,7 +452,7 @@ export default function CapturePage() {
           </div>
         )}
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-          <button className="btn" onClick={startRecord} disabled={busy || !!cameraError}>
+          <button className="btn" onClick={startRecord} disabled={busy || !!cameraError || !cameraReady}>
             {PHASE_LABELS[phase]}
           </button>
           <button className="btn btn-secondary" onClick={undoLast} disabled={busy || (counts[current.sign_id] ?? 0) === 0}>
