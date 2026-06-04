@@ -35,6 +35,7 @@ const CORRECTION_RECORD_MS = 2200;
 const CORRECTION_MANIFEST_KEY = "recognition_correction_clips";
 const PRACTICE_MODE_KEY = "practice_mode";
 const PRACTICE_ORDER_KEY = "practice_order";
+const PRACTICE_UNIT_FILTER_KEY = "practice_unit_filter";
 const WATCHLIST_SELF_CHECK_HINT =
   "This sign is on the model watchlist, so recognition asks for your self-check instead of auto-passing it.";
 
@@ -67,9 +68,9 @@ function stableShuffle(items: SignMeta[]) {
 }
 
 function outcomeLabel(outcome: string) {
-  if (outcome === "pass") return "pass";
-  if (outcome === "retry") return "needs practice";
-  return outcome;
+  if (outcome === "pass") return "matched";
+  if (outcome === "retry") return "review";
+  return "try again";
 }
 
 function liveTrackingLabel(ratio: number | null) {
@@ -125,16 +126,30 @@ export default function PracticePage() {
   const [recognitionFeedback, setRecognitionFeedback] = useState(readRecognitionFeedback);
   const [correctionStatus, setCorrectionStatus] = useState("");
   const [correctionClips, setCorrectionClips] = useState<CorrectionClip[]>([]);
+  const [selfCheckUrl, setSelfCheckUrl] = useState<string | null>(null);
   const sessionId = sessionStorage.getItem("practice_session_id") || undefined;
   const wave = Number(sessionStorage.getItem("practice_wave") || "1");
+  const unitFilter = useMemo(() => {
+    try {
+      return (localStorage.getItem(PRACTICE_UNIT_FILTER_KEY) || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean);
+    } catch {
+      return [];
+    }
+  }, []);
 
   const feedbackSummary = useMemo(() => summarizeRecognitionFeedback(recognitionFeedback), [recognitionFeedback]);
   const orderedSigns = useMemo(() => {
-    if (practiceOrder === "default") return signs;
-    if (practiceOrder === "shuffle") return stableShuffle(signs);
-    if (practiceOrder === "confusions") return buildConfusionDrillSigns(signs, calibration);
-    return buildLearningPriorities(signs, calibration, feedbackSummary).map((p) => p.sign);
-  }, [calibration, feedbackSummary, practiceOrder, signs]);
+    const filteredSigns = unitFilter.length > 0
+      ? signs.filter((sign) => unitFilter.includes(sign.sign_id))
+      : signs;
+    if (practiceOrder === "default") return filteredSigns;
+    if (practiceOrder === "shuffle") return stableShuffle(filteredSigns);
+    if (practiceOrder === "confusions") return buildConfusionDrillSigns(filteredSigns, calibration);
+    return buildLearningPriorities(filteredSigns, calibration, feedbackSummary).map((p) => p.sign);
+  }, [calibration, feedbackSummary, practiceOrder, signs, unitFilter]);
   const current = orderedSigns[index];
   const currentReliability = current ? reliabilityFor(calibration?.thresholds?.[current.sign_id]) : "watch";
   const currentFeedback = current ? feedbackSummary.bySign[current.sign_id] : null;
@@ -188,6 +203,7 @@ export default function PracticePage() {
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
+    if (selfCheckUrl) URL.revokeObjectURL(selfCheckUrl);
   };
 
   const resetRecognitionDetails = () => {
@@ -197,6 +213,11 @@ export default function PracticePage() {
     setRouteInfo(null);
     setTrackingRatio(null);
     setRecognitionFeedbackSaved(false);
+  };
+
+  const clearSelfCheckClip = () => {
+    if (selfCheckUrl) URL.revokeObjectURL(selfCheckUrl);
+    setSelfCheckUrl(null);
   };
 
   const startCamera = useCallback(async () => {
@@ -315,9 +336,13 @@ export default function PracticePage() {
     resetRecognitionDetails();
   };
 
-  const startSelfCheck = () => {
+  const startSelfCheck = async () => {
+    if (!streamRef.current) return;
     setPhase("recording");
-    window.setTimeout(() => {
+    clearSelfCheckClip();
+    try {
+      const blob = await recordVideo(streamRef.current, RECORD_MS);
+      setSelfCheckUrl(URL.createObjectURL(blob));
       setOutcome(null);
       setConfidence(0);
       setPredicted("");
@@ -325,7 +350,11 @@ export default function PracticePage() {
       setHint(null);
       setCorrectionStatus("");
       setPhase("selfCheck");
-    }, RECORD_MS);
+    } catch (err) {
+      setOutcome("retry");
+      setHint(`Recording failed: ${(err as Error).message}`);
+      setPhase("result");
+    }
   };
 
   const completeSelfCheck = async (result: EvalOutcome) => {
@@ -504,6 +533,7 @@ export default function PracticePage() {
     setOutcome(null);
     setHint(null);
     setCorrectionStatus("");
+    clearSelfCheckClip();
     resetRecognitionDetails();
     setPhase("prompt");
     if (index + 1 < orderedSigns.length) setIndex(index + 1);
@@ -604,7 +634,7 @@ export default function PracticePage() {
       <Link to="/lobby">← Lobby</Link>
       <h1 style={{ marginTop: "0.5rem" }}>Practice</h1>
       <p>
-        Sign {index + 1} of {signs.length}: <strong style={{ fontSize: "1.5rem" }}>{current?.gloss}</strong>
+        Sign {index + 1} of {orderedSigns.length}: <strong style={{ fontSize: "1.5rem" }}>{current?.gloss}</strong>
         {current && current.trained === false && (
           <span
             style={{
@@ -622,6 +652,14 @@ export default function PracticePage() {
           </span>
         )}
       </p>
+      {unitFilter.length > 0 && (
+        <div className="card" style={{ marginTop: "1rem" }}>
+          <strong>Unit practice</strong>
+          <p style={{ color: "var(--muted)", marginBottom: 0 }}>
+            Practicing {unitFilter.length} signs from your selected Learn unit. Return to the lobby to start a full session.
+          </p>
+        </div>
+      )}
       {practiceMode === "recognition" && current && (
         <div className="card" style={{ marginTop: "1rem" }}>
           <strong>Recognition readiness</strong>
@@ -799,7 +837,7 @@ export default function PracticePage() {
             )}
             <div style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
               {practiceMode === "guided" && (
-                <button className="btn" disabled={!!cameraError} onClick={startSelfCheck}>
+                <button className="btn" disabled={!!cameraError} onClick={() => void startSelfCheck()}>
                   Record & self-check
                 </button>
               )}
@@ -850,6 +888,23 @@ export default function PracticePage() {
                 </p>
               </div>
             )}
+            {selfCheckUrl && (
+              <div className="review-grid" style={{ marginBottom: "0.75rem" }}>
+                <div>
+                  <strong>Your recording</strong>
+                  <video
+                    src={selfCheckUrl}
+                    controls
+                    playsInline
+                    style={{ width: "100%", marginTop: "0.5rem", borderRadius: 8, background: "#000" }}
+                  />
+                </div>
+                <div>
+                  <strong>Reference video</strong>
+                  <ReferenceVideo signId={current.sign_id} />
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
               <button className="btn" onClick={() => void completeSelfCheck("pass")}>
                 Matched it
@@ -864,7 +919,7 @@ export default function PracticePage() {
         {phase === "result" && outcome && (
           <>
             <p className={`status-${outcome}`} style={{ fontSize: "1.25rem", fontWeight: 600 }}>
-              {outcome === "pass" ? "Pass" : outcome === "retry" ? "Needs practice" : "Fail"}
+              {outcome === "pass" ? "Matched" : outcome === "retry" ? "Review once more" : "Try again"}
               {practiceMode === "recognition" && predicted !== "low_tracking" && outcome !== "pass" && ` - ${(confidence * 100).toFixed(0)}% confidence`}
             </p>
             {practiceMode === "recognition" && predicted && predicted !== "low_tracking" && (
@@ -972,7 +1027,7 @@ export default function PracticePage() {
                 </button>
               )}
               <button className="btn btn-secondary" onClick={nextSign}>
-                {outcome === "pass" ? "Next sign" : "Skip to next"}
+                {outcome === "pass" ? "Next sign" : "Keep going"}
               </button>
             </div>
           </>

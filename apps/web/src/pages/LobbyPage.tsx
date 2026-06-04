@@ -78,6 +78,7 @@ export default function LobbyPage() {
     sessionStorage.setItem("practice_wave", String(wave));
     sessionStorage.setItem("practice_session_id", sess.id);
     sessionStorage.removeItem("session_log");
+    localStorage.removeItem("practice_unit_filter");
     if (order) localStorage.setItem("practice_order", order);
     window.location.href = "/practice";
   };

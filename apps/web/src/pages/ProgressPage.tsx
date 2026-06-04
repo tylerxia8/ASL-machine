@@ -123,6 +123,29 @@ export default function ProgressPage() {
     );
   };
 
+  const exportStudentReport = () => {
+    const lines = [
+      "Intro ASL Practice Report",
+      `Exported: ${new Date().toLocaleString()}`,
+      "",
+      "Summary",
+      `Mastered signs: ${summary?.mastered_count ?? 0}`,
+      `Attempts: ${summary?.total_attempts ?? 0}`,
+      `Passes: ${summary?.total_passes ?? 0}`,
+      `Phrase attempts: ${phraseSummary.total}`,
+      `Recognition feedback: ${feedbackSummary.accepted} right / ${feedbackSummary.rejected} wrong`,
+      "",
+      "Signs to review",
+      ...learningPriorities.slice(0, 8).map((row) => `- ${row.sign.sign_id}: ${row.reasons.slice(0, 2).join(", ")}`),
+      "",
+      "Recent attempts",
+      ...(summary?.recent_attempts ?? []).slice(0, 10).map((row) =>
+        `- ${row.sign_id}: ${outcomeLabel(row.outcome)} (${new Date(row.created_at).toLocaleString()})`
+      ),
+    ];
+    downloadText(`asl_practice_report_${Date.now()}.txt`, lines.join("\n"), "text/plain");
+  };
+
   const resetFeedback = () => {
     clearRecognitionFeedback();
     setRecognitionFeedback([]);
@@ -173,6 +196,9 @@ export default function ProgressPage() {
             <Link to="/lobby" className="btn" style={{ display: "inline-block", marginTop: "0.5rem" }}>
               Practice more
             </Link>
+            <button className="btn btn-secondary" style={{ marginLeft: "0.5rem" }} onClick={exportStudentReport}>
+              Export class report
+            </button>
           </div>
 
           {sortedMastery.length > 0 && (

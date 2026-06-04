@@ -9,6 +9,7 @@ import DryRunPage from "./pages/DryRunPage";
 import PhrasePage from "./pages/PhrasePage";
 import ReviewCapturesPage from "./pages/ReviewCapturesPage";
 import ModelHealthPage from "./pages/ModelHealthPage";
+import LearnPage from "./pages/LearnPage";
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { loading } = useAuth();
@@ -27,6 +28,7 @@ export default function App() {
         {loggedIn && (
           <>
             <NavLink to="/lobby">Practice</NavLink>
+            <NavLink to="/learn">Learn</NavLink>
             <NavLink to="/progress">Progress</NavLink>
             <NavLink to="/capture">Capture</NavLink>
             <NavLink to="/review-captures">Review</NavLink>
@@ -49,6 +51,14 @@ export default function App() {
           element={
             <Protected>
               <LobbyPage />
+            </Protected>
+          }
+        />
+        <Route
+          path="/learn"
+          element={
+            <Protected>
+              <LearnPage />
             </Protected>
           }
         />

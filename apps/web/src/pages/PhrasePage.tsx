@@ -14,9 +14,13 @@ type Phrase = {
 const PHRASES: Phrase[] = [
   { id: "hello_name", label: "Hello, my name", signs: ["hello", "name"] },
   { id: "thank_you", label: "Thank you", signs: ["thank_you"] },
+  { id: "please_help", label: "Please help", signs: ["please", "help"] },
   { id: "where_help", label: "Where help?", signs: ["where", "help"] },
   { id: "nice_meet", label: "Nice to meet you", signs: ["nice", "meet"] },
   { id: "who_deaf", label: "Who is deaf?", signs: ["who", "deaf"] },
+  { id: "what_name", label: "What name?", signs: ["what", "name"] },
+  { id: "water_please", label: "Water please", signs: ["water", "please"] },
+  { id: "eat_sleep", label: "Eat, sleep", signs: ["eat", "sleep"] },
 ];
 export default function PhrasePage() {
   const auth = useAuth();
@@ -71,6 +75,9 @@ export default function PhrasePage() {
     <div className="container">
       <Link to="/lobby">← Lobby</Link>
       <h1>Phrase Practice</h1>
+      <p style={{ color: "var(--muted)" }}>
+        Practice short beginner sequences. Move sign by sign first, then sign the whole phrase smoothly.
+      </p>
 
       <div className="card">
         <p style={{ color: "var(--muted)", marginTop: 0 }}>Phrase {index + 1} of {PHRASES.length}</p>
